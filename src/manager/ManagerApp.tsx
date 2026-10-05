@@ -1,4 +1,38 @@
-// src/manager/ManagerApp.tsx (Task 9에서 교체)
+import { api } from "@/lib/api";
+import { useData, useSettings } from "@/lib/hooks";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RoutinesTab } from "./RoutinesTab";
+
 export function ManagerApp() {
-  return <div className="p-6 text-sm">관리 창</div>;
+  const { data: status } = useData(api.status);
+  const ready = status?.ready ?? false;
+  useSettings(ready);
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="flex items-center gap-2.5 border-b border-border px-6 py-4">
+        <div className="size-6 rounded-lg bg-soft-3" />
+        <h1 className="text-base font-semibold">G-routine 관리</h1>
+      </header>
+      {status && !ready && <p className="p-6 text-sm text-muted-foreground">먼저 위젯에서 시작 설정을 마쳐 주세요.</p>}
+      {ready && (
+        <Tabs defaultValue="routines" className="px-6 py-4">
+          <TabsList>
+            <TabsTrigger value="routines">루틴 관리</TabsTrigger>
+            <TabsTrigger value="history">완료 기록</TabsTrigger>
+            <TabsTrigger value="settings">설정</TabsTrigger>
+          </TabsList>
+          <TabsContent value="routines">
+            <RoutinesTab />
+          </TabsContent>
+          <TabsContent value="history">
+            <p className="text-sm text-muted-foreground">준비 중</p>
+          </TabsContent>
+          <TabsContent value="settings">
+            <p className="text-sm text-muted-foreground">준비 중</p>
+          </TabsContent>
+        </Tabs>
+      )}
+    </div>
+  );
 }
