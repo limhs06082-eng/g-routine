@@ -9,7 +9,7 @@ import { RoutineForm } from "./RoutineForm";
 import { moveItem, repeatLabel } from "./routines";
 
 export function RoutinesTab() {
-  const { data, setData } = useData(api.listRoutines);
+  const { data, error, reload, setData } = useData(api.listRoutines);
   const [editing, setEditing] = useState<number | null>(null);
   const [confirming, setConfirming] = useState<number | null>(null);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
@@ -21,6 +21,7 @@ export function RoutinesTab() {
       setDragFrom(null);
       return;
     }
+    setNotice(null);
     const next = moveItem(routines, dragFrom, to);
     setData(next);
     setDragFrom(null);
@@ -28,10 +29,12 @@ export function RoutinesTab() {
       await api.reorderRoutines(next.map((r) => r.id));
     } catch (e) {
       setNotice(errorMessage(e));
+      await reload();
     }
   }
 
   async function remove(id: number) {
+    setNotice(null);
     try {
       await api.archiveRoutine(id);
     } catch (e) {
@@ -44,9 +47,18 @@ export function RoutinesTab() {
     <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-6">
       <section>
         <h2 className="mb-2 text-sm font-semibold">
-          내 루틴 <span className="font-normal text-muted-foreground">{routines.length}개</span>
+          내 루틴 {data && <span className="font-normal text-muted-foreground">{routines.length}개</span>}
         </h2>
-        {routines.length === 0 ? (
+        {data === null ? (
+          error && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>루틴 목록을 불러오지 못했어요.</span>
+              <Button size="sm" variant="outline" onClick={() => void reload()}>
+                다시 시도
+              </Button>
+            </div>
+          )
+        ) : routines.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             아직 루틴이 없어요. 오른쪽에서 첫 루틴을 추가해 보세요.
           </p>

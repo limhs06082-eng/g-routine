@@ -24,6 +24,7 @@ export function RoutineForm({ initial, onSubmit, onCancel }: Props) {
   };
 
   async function submit() {
+    if (busy) return;
     const normalized = normalize(input);
     const message = validateInput(normalized);
     if (message) {

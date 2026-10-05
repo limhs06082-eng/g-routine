@@ -157,7 +157,9 @@ export function installMockBackend() {
         changed();
         return null;
       case "list_routines":
-        return routines.filter((r) => !r.archivedAt && !(r.repeatType === "once" && (r.onceDate ?? "") < TODAY));
+        return routines
+          .filter((r) => !r.archivedAt && !(r.repeatType === "once" && (r.onceDate ?? "") < TODAY))
+          .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
       case "create_routine": {
         const id = nextId++;
         routines.push(fromInput(id, args.input as RoutineInput, routines.length));

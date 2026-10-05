@@ -66,3 +66,12 @@ test("edit mode shows existing values and a save button", () => {
   expect(screen.getByRole("button", { name: "저장" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "취소" })).toBeInTheDocument();
 });
+
+test("pressing Enter twice while saving submits only once", async () => {
+  const onSubmit = vi.fn(() => new Promise<void>(() => {}));
+  const user = userEvent.setup();
+  render(<RoutineForm onSubmit={onSubmit} />);
+  await user.type(screen.getByLabelText("루틴 이름"), "급식 지도");
+  await user.keyboard("{Enter}{Enter}");
+  expect(onSubmit).toHaveBeenCalledTimes(1);
+});
