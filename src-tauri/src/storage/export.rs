@@ -224,7 +224,7 @@ mod tests {
         settings::set_window_pos(&dst, 10, 10).unwrap();
 
         // Create backup with window_x in settings plus valid and invalid settings
-        let mut backup = BackupFile {
+        let backup = BackupFile {
             app: APP.into(),
             version: VERSION,
             exported_at: "2026-10-05T10:00:00".into(),
@@ -240,20 +240,17 @@ mod tests {
         import(&dst, &backup).unwrap();
         let loaded = settings::load(&dst).unwrap();
         assert_eq!(loaded.theme, "mint");
-        // Verify window position was preserved
-        let (x, _y) = dst.query_row(
-            "SELECT key, value FROM settings WHERE key = 'window_x'",
-            [],
-            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
-        ).unwrap();
-        assert_eq!(x, "window_x");
+        // Verify window position was preserved (not overwritten by backup)
+        assert_eq!(settings::window_pos(&dst).unwrap(), Some((10, 10)));
+        // Verify bogus key was not imported
+        assert_eq!(settings::get(&dst, "bogus").unwrap(), None);
     }
 
     #[test]
     fn rejects_backup_with_invalid_weekdays() {
         let t = tempfile::tempdir().unwrap();
         let path = t.path().join("bad.json");
-        let mut backup = BackupFile {
+        let backup = BackupFile {
             app: APP.into(),
             version: VERSION,
             exported_at: "2026-10-05T10:00:00".into(),

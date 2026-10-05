@@ -39,15 +39,27 @@ pub fn daily_backup(c: &Connection, data_dir: &Path, day: &str) -> AppResult<Opt
     // Use temp file to ensure atomicity: VACUUM INTO temp, then rename only on success
     let temp = dir.join(format!("{PREFIX}{day}.db.tmp"));
     let _ = fs::remove_file(&temp); // Delete any stale temp file
-    c.execute("VACUUM INTO ?1", [temp.to_string_lossy().to_string()])?;
-    fs::rename(&temp, &target)?;
-    let files = list_backups(&dir);
-    if files.len() > KEEP {
-        for old in &files[..files.len() - KEEP] {
-            let _ = fs::remove_file(old);
+    match c.execute("VACUUM INTO ?1", [temp.to_string_lossy().to_string()]) {
+        Ok(_) => match fs::rename(&temp, &target) {
+            Ok(_) => {
+                let files = list_backups(&dir);
+                if files.len() > KEEP {
+                    for old in &files[..files.len() - KEEP] {
+                        let _ = fs::remove_file(old);
+                    }
+                }
+                Ok(Some(target))
+            }
+            Err(e) => {
+                let _ = fs::remove_file(&temp);
+                Err(e.into())
+            }
+        },
+        Err(e) => {
+            let _ = fs::remove_file(&temp);
+            Err(e.into())
         }
     }
-    Ok(Some(target))
 }
 
 pub fn latest_backup(data_dir: &Path) -> Option<PathBuf> {
