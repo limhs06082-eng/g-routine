@@ -1,7 +1,41 @@
-# Tauri + React + Typescript
+# G-routine
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+교사가 매일 해야 할 루틴(출결 확인, 수업 준비, 누가기록 …)을 바탕화면 우측 하단에 작게 띄워 두고, 끝날 때마다 체크해서 지우는 가벼운 Windows 프로그램입니다.
 
-## Recommended IDE Setup
+## 설치
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+| 방식 | 파일 | 특징 |
+|---|---|---|
+| 설치형 | `G-routine_0.1.0_x64-setup.exe` | 관리자 권한 없이 설치. 처음 실행할 때 데이터 저장 폴더를 고릅니다 |
+| 포터블 | `G-routine_0.1.0_portable.zip` | 압축을 풀어 바로 실행. 데이터는 같은 폴더의 `data\`에 저장됩니다 |
+
+### 복원 프로그램이 있는 학교 PC
+재부팅하면 C드라이브가 초기화되는 PC라면 다음 순서를 따르세요.
+1. 복원 프로그램을 **해제한 상태**에서 설치형으로 설치하고 한 번 실행합니다 (자동 시작 등록이 유지됩니다).
+2. 저장 위치는 **D드라이브**(기본값 `D:\G-routine\data`)로 둡니다.
+3. 복원을 다시 켜도 루틴과 체크 기록은 D드라이브에 남습니다. 혹시 설정이 지워져도 G-routine이 `D:\G-routine\data`를 자동으로 다시 찾습니다.
+
+또는 포터블 zip을 D드라이브에 풀어서 쓰면 C드라이브를 전혀 쓰지 않습니다. 단, 이 경우 자동 시작은 복원 해제 상태에서 켜야 유지됩니다.
+
+## 사용법
+- 동그라미를 누르면 완료 → 3초 안에 "되돌리기" 가능
+- ↗ 버튼: 루틴에 연결한 사이트나 프로그램(NEIS 등) 열기
+- 아래 입력란: 오늘 하루만 할 일을 빠르게 추가 (그날이 지나면 미완료로 기록되고 사라짐)
+- ⚙: 관리 창 (루틴 관리 · 완료 기록 · 설정)
+- 트레이 아이콘: 위젯 보이기, 맨 위 고정, 자동 시작, 위치 초기화, 종료
+- 하루는 기본적으로 **오전 4시**에 바뀝니다 (설정에서 변경)
+
+## 개발
+
+```bash
+npm install
+npm run tauri dev      # 개발 실행
+npm test               # 화면 테스트 (Vitest)
+cd src-tauri && cargo test   # 규칙 · 저장 테스트
+npm run tauri build    # 설치 파일 빌드
+powershell -ExecutionPolicy Bypass -File scripts/package-portable.ps1   # 포터블 zip
+```
+
+브라우저에서 `npm run dev` 후 `http://localhost:1420/`(위젯), `?window=manager`(관리 창), `?setup=1`(첫 실행)로 가짜 데이터 화면을 볼 수 있습니다.
+
+설계 문서: `docs/superpowers/specs/2026-10-05-g-routine-design.md`
