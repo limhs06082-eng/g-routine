@@ -3,6 +3,7 @@ mod domain;
 mod error;
 mod model;
 mod service;
+mod storage;
 mod templates;
 #[cfg(test)]
 mod test_util;
