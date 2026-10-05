@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { ChevronDown, ChevronUp, Coffee, PartyPopper } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { api, errorMessage, type DayItem, type TodayView } from "@/lib/api";
 import { useData } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
@@ -40,8 +41,8 @@ function EmptyState({ view, total }: { view: TodayView; total: number }) {
   );
 }
 
-export function TodayPanel({ pinned, onTogglePin }: { pinned: boolean; onTogglePin: () => void }) {
-  const { data, setData } = useData(api.today);
+export function TodayPanel({ pinned, onTogglePin }: { pinned: boolean; onTogglePin: () => Promise<unknown> }) {
+  const { data, error, reload, setData } = useData(api.today);
   const [leaving, setLeaving] = useState<number[]>([]);
   const [undoItem, setUndoItem] = useState<DayItem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -49,7 +50,17 @@ export function TodayPanel({ pinned, onTogglePin }: { pinned: boolean; onToggleP
   const closeUndo = useCallback(() => setUndoItem(null), []);
   const closeNotice = useCallback(() => setNotice(null), []);
 
-  if (!data) return <div className="h-28" />;
+  if (!data) {
+    if (!error) return <div className="h-28" />;
+    return (
+      <div className="flex flex-col items-center gap-2 px-4 py-6 text-center text-xs text-muted-foreground">
+        <span>오늘 목록을 불러오지 못했어요.</span>
+        <Button size="sm" variant="outline" onClick={() => void reload()}>
+          다시 시도
+        </Button>
+      </div>
+    );
+  }
   const view = data;
   const { done, total, percent } = progress(view);
   const allDone = total > 0 && done === total;
@@ -64,6 +75,7 @@ export function TodayPanel({ pinned, onTogglePin }: { pinned: boolean; onToggleP
       setUndoItem(item);
     } catch (e) {
       setNotice(errorMessage(e));
+      void reload();
     } finally {
       setLeaving((l) => l.filter((id) => id !== item.id));
     }
@@ -75,6 +87,7 @@ export function TodayPanel({ pinned, onTogglePin }: { pinned: boolean; onToggleP
       setData((v) => (v ? markPending(v, item.id) : v));
     } catch (e) {
       setNotice(errorMessage(e));
+      void reload();
     }
   }
 
@@ -97,7 +110,7 @@ export function TodayPanel({ pinned, onTogglePin }: { pinned: boolean; onToggleP
 
   return (
     <div className="flex flex-col">
-      <WidgetHeader dayLabel={formatDayLabel(view.day)} pinned={pinned} onTogglePin={onTogglePin} />
+      <WidgetHeader dayLabel={formatDayLabel(view.day)} pinned={pinned} onTogglePin={() => void onTogglePin().catch((e) => setNotice(errorMessage(e)))} />
       <div className="px-3.5 pb-2.5">
         <div className="mb-1 flex justify-between text-xs text-muted-foreground">
           <span>오늘의 루틴</span>

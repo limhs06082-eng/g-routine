@@ -48,7 +48,7 @@ beforeEach(() => {
   apiMock.openLink.mockResolvedValue(undefined);
 });
 
-const renderPanel = () => render(<TodayPanel pinned onTogglePin={() => {}} />);
+const renderPanel = () => render(<TodayPanel pinned onTogglePin={() => Promise.resolve()} />);
 
 test("shows date, progress and chips", async () => {
   renderPanel();
@@ -71,13 +71,46 @@ test("checking hides the item and undo brings it back", async () => {
   expect(apiMock.setDone).toHaveBeenLastCalledWith(1, false);
 });
 
-test("failed save keeps the item and shows the error", async () => {
+test("failed save keeps the item, clears the fade and allows a retry", async () => {
   apiMock.setDone.mockRejectedValueOnce("데이터를 저장하거나 읽지 못했어요");
   const user = userEvent.setup();
   renderPanel();
   await user.click(await screen.findByRole("button", { name: "출결 확인 완료" }));
   expect(await screen.findByText("데이터를 저장하거나 읽지 못했어요")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "출결 확인 완료" })).toBeInTheDocument();
+  const button = screen.getByRole("button", { name: "출결 확인 완료" });
+  await waitFor(() => expect(button.closest("li")).not.toHaveClass("opacity-0"));
+  expect(apiMock.setDone).toHaveBeenCalledTimes(1);
+
+  await user.click(button);
+  await waitFor(() => expect(apiMock.setDone).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "출결 확인 완료" })).not.toBeInTheDocument());
+});
+
+test("failed save reloads the list so a day rollover is picked up", async () => {
+  apiMock.setDone.mockRejectedValueOnce("날짜가 바뀌었어요. 목록을 새로 불러올게요");
+  const user = userEvent.setup();
+  renderPanel();
+  await user.click(await screen.findByRole("button", { name: "출결 확인 완료" }));
+  expect(await screen.findByText("날짜가 바뀌었어요. 목록을 새로 불러올게요")).toBeInTheDocument();
+  await waitFor(() => expect(apiMock.today).toHaveBeenCalledTimes(2));
+});
+
+test("load failure shows a retry button", async () => {
+  apiMock.today.mockRejectedValueOnce("x");
+  const user = userEvent.setup();
+  renderPanel();
+  expect(await screen.findByText("오늘 목록을 불러오지 못했어요.")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "다시 시도" }));
+  expect(await screen.findByText("10월 5일 월요일")).toBeInTheDocument();
+  expect(screen.queryByText("오늘 목록을 불러오지 못했어요.")).not.toBeInTheDocument();
+});
+
+test("failed pin toggle shows the error", async () => {
+  const user = userEvent.setup();
+  const onTogglePin = vi.fn().mockRejectedValueOnce("고정하지 못했어요");
+  render(<TodayPanel pinned onTogglePin={onTogglePin} />);
+  await user.click(await screen.findByRole("button", { name: "맨 위 고정 해제" }));
+  expect(await screen.findByText("고정하지 못했어요")).toBeInTheDocument();
 });
 
 test("quick add sends trimmed text on Enter", async () => {
