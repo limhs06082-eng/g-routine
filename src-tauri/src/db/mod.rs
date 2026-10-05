@@ -62,8 +62,10 @@ fn prepare(conn: &Connection) -> AppResult<()> {
 fn migrate(conn: &Connection) -> AppResult<()> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     if version < 1 {
-        conn.execute_batch(SCHEMA_V1)?;
-        conn.pragma_update(None, "user_version", 1)?;
+        let tx = conn.unchecked_transaction()?;
+        tx.execute_batch(SCHEMA_V1)?;
+        tx.pragma_update(None, "user_version", 1)?;
+        tx.commit()?;
     }
     Ok(())
 }
@@ -76,6 +78,7 @@ pub fn integrity_ok(conn: &Connection) -> AppResult<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn migration_creates_tables_once_and_sets_version() {
@@ -92,5 +95,35 @@ mod tests {
             .unwrap();
         assert_eq!(tables, 3);
         assert!(integrity_ok(&conn).unwrap());
+    }
+
+    #[test]
+    fn file_backed_migration_survives_reopen() {
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+
+        // First open: creates schema
+        {
+            let conn = open(&db_path).unwrap();
+            let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+            assert_eq!(version, 1);
+            assert!(integrity_ok(&conn).unwrap());
+        }
+
+        // Reopen: should find existing schema and not error
+        {
+            let conn = open(&db_path).unwrap();
+            let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+            assert_eq!(version, 1);
+            let tables: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('routines','day_items','settings')",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(tables, 3);
+            assert!(integrity_ok(&conn).unwrap());
+        }
     }
 }

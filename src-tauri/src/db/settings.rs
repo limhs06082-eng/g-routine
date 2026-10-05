@@ -67,13 +67,29 @@ pub fn window_pos(c: &Connection) -> AppResult<Option<(i32, i32)>> {
 }
 
 pub fn set_window_pos(c: &Connection, x: i32, y: i32) -> AppResult<()> {
-    set(c, "window_x", &x.to_string())?;
-    set(c, "window_bottom", &y.to_string())
+    let tx = c.unchecked_transaction()?;
+    let x_str = x.to_string();
+    let y_str = y.to_string();
+    tx.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params!["window_x", x_str],
+    )?;
+    tx.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params!["window_bottom", y_str],
+    )?;
+    tx.commit()?;
+    Ok(())
 }
 
 pub fn clear_window_pos(c: &Connection) -> AppResult<()> {
-    remove(c, "window_x")?;
-    remove(c, "window_bottom")
+    let tx = c.unchecked_transaction()?;
+    tx.execute("DELETE FROM settings WHERE key = ?1", ["window_x"])?;
+    tx.execute("DELETE FROM settings WHERE key = ?1", ["window_bottom"])?;
+    tx.commit()?;
+    Ok(())
 }
 
 #[cfg(test)]
