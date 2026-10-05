@@ -36,7 +36,11 @@ pub fn daily_backup(c: &Connection, data_dir: &Path, day: &str) -> AppResult<Opt
     if target.exists() {
         return Ok(None);
     }
-    c.execute("VACUUM INTO ?1", [target.to_string_lossy().to_string()])?;
+    // Use temp file to ensure atomicity: VACUUM INTO temp, then rename only on success
+    let temp = dir.join(format!("{PREFIX}{day}.db.tmp"));
+    let _ = fs::remove_file(&temp); // Delete any stale temp file
+    c.execute("VACUUM INTO ?1", [temp.to_string_lossy().to_string()])?;
+    fs::rename(&temp, &target)?;
     let files = list_backups(&dir);
     if files.len() > KEEP {
         for old in &files[..files.len() - KEEP] {
@@ -50,10 +54,36 @@ pub fn latest_backup(data_dir: &Path) -> Option<PathBuf> {
     list_backups(&backups_dir(data_dir)).pop()
 }
 
+/// Restore the most recent valid backup to the data directory.
+///
+/// Iterates through backups from newest to oldest, checking integrity with `db::integrity_ok`.
+/// Caller must drop its own Connection to this database before calling.
 pub fn restore_latest(data_dir: &Path) -> AppResult<()> {
-    let latest = latest_backup(data_dir).ok_or_else(|| AppError::invalid("복구할 백업 파일이 없어요"))?;
-    fs::copy(latest, data_dir.join(DB_FILE))?;
-    Ok(())
+    use crate::db;
+
+    let mut backups = list_backups(&backups_dir(data_dir));
+    backups.reverse(); // Iterate newest to oldest
+
+    for backup_path in backups {
+        // Check integrity without keeping connection open
+        let valid = {
+            match db::open(&backup_path) {
+                Ok(c) => db::integrity_ok(&c).unwrap_or(false),
+                Err(_) => false,
+            }
+        }; // Connection dropped here
+
+        if valid {
+            // Copy to temp file first, then rename to ensure atomicity
+            let db_path = data_dir.join(DB_FILE);
+            let temp_path = data_dir.join(format!("{DB_FILE}.restore.tmp"));
+            fs::copy(&backup_path, &temp_path)?;
+            fs::rename(&temp_path, &db_path)?;
+            return Ok(());
+        }
+    }
+
+    Err(AppError::invalid("복구할 수 있는 백업 파일이 없어요"))
 }
 
 #[cfg(test)]
@@ -93,5 +123,23 @@ mod tests {
     fn restore_without_backups_fails() {
         let t = tempfile::tempdir().unwrap();
         assert!(restore_latest(t.path()).is_err());
+    }
+
+    #[test]
+    fn restore_skips_corrupted_newest_backup() {
+        let t = tempfile::tempdir().unwrap();
+        // Create two backups
+        {
+            let c = db::open(&t.path().join(DB_FILE)).unwrap();
+            daily_backup(&c, t.path(), "2026-10-01").unwrap();
+            daily_backup(&c, t.path(), "2026-10-02").unwrap();
+        }
+        // Corrupt the newest backup
+        let backups = list_backups(&backups_dir(t.path()));
+        fs::write(&backups[1], b"corrupted data").unwrap();
+        // Restore should use the older one
+        restore_latest(t.path()).unwrap();
+        let c = db::open(&t.path().join(DB_FILE)).unwrap();
+        assert!(db::integrity_ok(&c).unwrap());
     }
 }

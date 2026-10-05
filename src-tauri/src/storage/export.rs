@@ -1,10 +1,12 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
-use crate::db::routines;
+use crate::db::{routines, settings};
+use crate::domain::day::parse_day;
 use crate::error::{AppError, AppResult};
 use crate::model::Routine;
 
@@ -102,7 +104,12 @@ pub fn import(c: &Connection, b: &BackupFile) -> AppResult<()> {
         )?;
     }
     for (k, v) in &b.settings {
-        tx.execute("INSERT INTO settings (key, value) VALUES (?1, ?2)", params![k, v])?;
+        // Skip window position settings to preserve UI state
+        if k.starts_with("window_") {
+            continue;
+        }
+        // Use settings::apply for validation and upserting; silently skip invalid pairs
+        let _ = settings::apply(&tx, k, v);
     }
     tx.commit()?;
     Ok(())
@@ -112,6 +119,48 @@ fn validate(b: &BackupFile) -> AppResult<()> {
     if b.app != APP || b.version != VERSION {
         return Err(AppError::invalid("G-routine 백업 파일이 아니에요"));
     }
+
+    // Validate routines
+    let mut routine_ids = HashSet::new();
+    for r in &b.routines {
+        // Check weekdays is valid (0-127)
+        if r.weekdays > 0x7F {
+            return Err(AppError::invalid("백업 파일 내용이 올바르지 않아요"));
+        }
+        // Check once_date format if present
+        if let Some(ref date) = r.once_date {
+            if parse_day(date).is_none() {
+                return Err(AppError::invalid("백업 파일 내용이 올바르지 않아요"));
+            }
+        }
+        // Check due_time format if present (must be exactly 5 chars and parse as HH:MM)
+        if let Some(ref time) = r.due_time {
+            if time.len() != 5 || chrono::NaiveTime::parse_from_str(time, "%H:%M").is_err() {
+                return Err(AppError::invalid("백업 파일 내용이 올바르지 않아요"));
+            }
+        }
+        if !routine_ids.insert(r.id) {
+            return Err(AppError::invalid("백업 파일 내용이 올바르지 않아요"));
+        }
+    }
+
+    // Validate day items
+    let mut day_item_ids = HashSet::new();
+    for d in &b.day_items {
+        // Check day format
+        if parse_day(&d.day).is_none() {
+            return Err(AppError::invalid("백업 파일 내용이 올바르지 않아요"));
+        }
+        // Check routine_id refers to a routine in the file
+        if !routine_ids.contains(&d.routine_id) {
+            return Err(AppError::invalid("백업 파일 내용이 올바르지 않아요"));
+        }
+        // Check day item ids are unique
+        if !day_item_ids.insert(d.id) {
+            return Err(AppError::invalid("백업 파일 내용이 올바르지 않아요"));
+        }
+    }
+
     Ok(())
 }
 
@@ -166,5 +215,72 @@ mod tests {
         assert!(read_file(&path).is_err());
         fs::write(&path, "not json").unwrap();
         assert!(read_file(&path).is_err());
+    }
+
+    #[test]
+    fn import_preserves_window_position_and_skips_invalid_settings() {
+        let dst = open_in_memory().unwrap();
+        // Set window position in destination
+        settings::set_window_pos(&dst, 10, 10).unwrap();
+
+        // Create backup with window_x in settings plus valid and invalid settings
+        let mut backup = BackupFile {
+            app: APP.into(),
+            version: VERSION,
+            exported_at: "2026-10-05T10:00:00".into(),
+            routines: vec![],
+            day_items: vec![],
+            settings: vec![
+                ("window_x".to_string(), "5".to_string()),
+                ("theme".to_string(), "mint".to_string()),
+                ("bogus".to_string(), "1".to_string()),
+            ],
+        };
+
+        import(&dst, &backup).unwrap();
+        let loaded = settings::load(&dst).unwrap();
+        assert_eq!(loaded.theme, "mint");
+        // Verify window position was preserved
+        let (x, _y) = dst.query_row(
+            "SELECT key, value FROM settings WHERE key = 'window_x'",
+            [],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+        ).unwrap();
+        assert_eq!(x, "window_x");
+    }
+
+    #[test]
+    fn rejects_backup_with_invalid_weekdays() {
+        let t = tempfile::tempdir().unwrap();
+        let path = t.path().join("bad.json");
+        let mut backup = BackupFile {
+            app: APP.into(),
+            version: VERSION,
+            exported_at: "2026-10-05T10:00:00".into(),
+            routines: vec![Routine {
+                id: 1,
+                title: "test".into(),
+                repeat_type: crate::model::RepeatType::Daily,
+                weekdays: 200,  // Invalid: > 0x7F
+                once_date: None,
+                due_time: None,
+                link: None,
+                sort_order: 0,
+                created_at: "2026-10-05T00:00:00".into(),
+                archived_at: None,
+            }],
+            day_items: vec![],
+            settings: vec![],
+        };
+        write_file(&path, &backup).unwrap();
+        assert!(read_file(&path).is_err());
+
+        // Verify destination data is unchanged
+        let dst = open_in_memory().unwrap();
+        service::create_routine(&dst, input_daily("original"), at("2026-10-05 09:00")).unwrap();
+        let before = dst.query_row("SELECT COUNT(*) FROM routines", [], |r| r.get::<_, i64>(0)).unwrap();
+        let _ = import(&dst, &backup);
+        let after = dst.query_row("SELECT COUNT(*) FROM routines", [], |r| r.get::<_, i64>(0)).unwrap();
+        assert_eq!(before, after);
     }
 }

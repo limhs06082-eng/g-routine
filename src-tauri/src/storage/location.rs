@@ -56,11 +56,28 @@ pub fn resolve(exe_dir: &Path, location_file: &Path, candidates: &[PathBuf]) -> 
     Resolution { dir: None, portable: false, previous }
 }
 
-/// D:~Z: 중 존재하는 드라이브의 \G-routine\data (D 우선)
+#[cfg(windows)]
+fn is_fixed_drive(root: &Path) -> bool {
+    use windows_sys::Win32::Storage::FileSystem::GetDriveTypeW;
+    const DRIVE_FIXED: u32 = 3;
+
+    let drive_str = root.to_string_lossy();
+    let mut utf16: Vec<u16> = drive_str.encode_utf16().collect();
+    utf16.push(0); // NUL-terminate
+
+    unsafe { GetDriveTypeW(utf16.as_ptr()) == DRIVE_FIXED }
+}
+
+#[cfg(not(windows))]
+fn is_fixed_drive(root: &Path) -> bool {
+    root.exists()
+}
+
+/// D:~Z: 중 존재하는 드라이브의 \G-routine\data (D 우선, 고정 드라이브만)
 pub fn drive_candidates() -> Vec<PathBuf> {
     ('D'..='Z')
         .map(|l| PathBuf::from(format!("{l}:\\")))
-        .filter(|root| root.exists())
+        .filter(|root| is_fixed_drive(root))
         .map(|root| root.join("G-routine").join("data"))
         .collect()
 }
