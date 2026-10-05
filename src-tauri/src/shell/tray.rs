@@ -41,8 +41,12 @@ pub fn build(app: &AppHandle, s: Option<&Settings>) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show" => window::show_widget(app),
+            // 이벤트 핸들러 안에서 창을 만들면 Windows에서 교착될 수 있어 별도 작업으로 넘긴다.
             "manager" => {
-                let _ = window::open_manager(app);
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = window::open_manager(&app);
+                });
             }
             "top" => toggle(app, "always_on_top"),
             "autostart" => toggle(app, "autostart"),

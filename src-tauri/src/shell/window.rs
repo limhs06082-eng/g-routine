@@ -5,7 +5,7 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Webview
 
 use crate::db::settings;
 use crate::service;
-use crate::shell::position::{anchored_y, bottom_right, center_inside, Rect};
+use crate::shell::position::{anchored_y, compute_position, Rect};
 use crate::state::AppState;
 use crate::{now, startup, DATA_CHANGED};
 
@@ -36,6 +36,7 @@ fn mark_programmatic_move(app: &AppHandle) {
 }
 
 /// saved = (x, 아래쪽 y). 저장 위치가 화면 밖이면 주 모니터 작업 영역 우측 하단에 둔다.
+/// DPI가 다른 모니터로 옮기면 Windows가 창 크기를 바꾸므로, 이동 후 크기를 다시 읽어 한 번 더 맞춘다.
 pub fn place_widget(app: &AppHandle, saved: Option<(i32, i32)>) -> tauri::Result<()> {
     let Some(w) = app.get_webview_window(WIDGET) else { return Ok(()) };
     let size = w.outer_size()?;
@@ -45,18 +46,22 @@ pub fn place_widget(app: &AppHandle, saved: Option<(i32, i32)>) -> tauri::Result
         .iter()
         .map(|m| Rect { x: m.position().x, y: m.position().y, w: m.size().width as i32, h: m.size().height as i32 })
         .collect();
-    let pos = match saved {
-        Some((x, bottom)) if center_inside(x, bottom - wh, ww, wh, &monitors) => (x, bottom - wh),
-        _ => {
-            let Some(m) = w.primary_monitor()?.or(w.current_monitor()?) else { return Ok(()) };
-            let wa = m.work_area();
-            let work = Rect { x: wa.position.x, y: wa.position.y, w: wa.size.width as i32, h: wa.size.height as i32 };
-            let margin = (MARGIN * m.scale_factor()).round() as i32;
-            bottom_right(work, ww, wh, margin)
-        }
-    };
+    let Some(m) = w.primary_monitor()?.or(w.current_monitor()?) else { return Ok(()) };
+    let wa = m.work_area();
+    let work = Rect { x: wa.position.x, y: wa.position.y, w: wa.size.width as i32, h: wa.size.height as i32 };
+    let margin = (MARGIN * m.scale_factor()).round() as i32;
+
+    let pos = compute_position(saved, ww, wh, &monitors, work, margin);
     mark_programmatic_move(app);
-    w.set_position(PhysicalPosition::new(pos.0, pos.1))
+    w.set_position(PhysicalPosition::new(pos.0, pos.1))?;
+
+    let after = w.outer_size()?;
+    if after != size {
+        let pos = compute_position(saved, after.width as i32, after.height as i32, &monitors, work, margin);
+        mark_programmatic_move(app);
+        w.set_position(PhysicalPosition::new(pos.0, pos.1))?;
+    }
+    Ok(())
 }
 
 pub fn reset_position(app: &AppHandle) {
