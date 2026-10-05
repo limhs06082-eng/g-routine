@@ -1,12 +1,14 @@
 import { api } from "@/lib/api";
 import { useData, useSettings } from "@/lib/hooks";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { HistoryTab } from "./HistoryTab";
 import { RoutinesTab } from "./RoutinesTab";
+import { SettingsTab } from "./SettingsTab";
 
 export function ManagerApp() {
   const { data: status } = useData(api.status);
   const ready = status?.ready ?? false;
-  useSettings(ready);
+  const { settings, update } = useSettings(ready);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -15,7 +17,7 @@ export function ManagerApp() {
         <h1 className="text-base font-semibold">G-routine 관리</h1>
       </header>
       {status && !ready && <p className="p-6 text-sm text-muted-foreground">먼저 위젯에서 시작 설정을 마쳐 주세요.</p>}
-      {ready && (
+      {status && ready && (
         <Tabs defaultValue="routines" className="px-6 py-4">
           <TabsList>
             <TabsTrigger value="routines">루틴 관리</TabsTrigger>
@@ -26,10 +28,10 @@ export function ManagerApp() {
             <RoutinesTab />
           </TabsContent>
           <TabsContent value="history">
-            <p className="text-sm text-muted-foreground">준비 중</p>
+            <HistoryTab />
           </TabsContent>
           <TabsContent value="settings">
-            <p className="text-sm text-muted-foreground">준비 중</p>
+            {settings && <SettingsTab settings={settings} status={status} onChange={update} />}
           </TabsContent>
         </Tabs>
       )}
