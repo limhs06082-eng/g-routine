@@ -1,24 +1,71 @@
+mod commands;
 mod db;
 mod domain;
 mod error;
 mod model;
 mod service;
+mod shell;
+mod startup;
+mod state;
 mod storage;
 mod templates;
 #[cfg(test)]
 mod test_util;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+use tauri::Manager;
+
+pub const DATA_CHANGED: &str = "data-changed";
+
+pub fn now() -> chrono::NaiveDateTime {
+    chrono::Local::now().naive_local()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            shell::window::show_widget(app);
+        }))
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            let location_file = app.path().app_config_dir()?.join("location.json");
+            let exe_dir = std::env::current_exe()?
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_default();
+            let state = state::AppState::new(location_file);
+            startup::boot(&state, &exe_dir, &storage::location::drive_candidates(), now());
+            app.manage(state);
+            shell::startup(app.handle())?;
+            Ok(())
+        })
+        .on_window_event(shell::window::on_window_event)
+        .invoke_handler(tauri::generate_handler![
+            commands::get_status,
+            commands::setup,
+            commands::restore_backup,
+            commands::get_today,
+            commands::set_done,
+            commands::quick_add,
+            commands::list_routines,
+            commands::create_routine,
+            commands::update_routine,
+            commands::archive_routine,
+            commands::reorder_routines,
+            commands::history_month,
+            commands::history_day,
+            commands::get_settings,
+            commands::set_setting,
+            commands::open_link,
+            commands::export_backup,
+            commands::import_backup,
+            commands::change_data_dir,
+            commands::open_manager,
+            commands::resize_widget,
+            commands::hide_widget,
+        ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .expect("G-routine을 실행하지 못했어요");
 }
