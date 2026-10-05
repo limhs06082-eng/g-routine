@@ -2,6 +2,8 @@ mod db;
 mod domain;
 mod error;
 mod model;
+mod service;
+mod templates;
 #[cfg(test)]
 mod test_util;
 
