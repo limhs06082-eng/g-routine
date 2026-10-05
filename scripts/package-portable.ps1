@@ -13,7 +13,17 @@ Set-Content -Path (Join-Path $stage "data/README.txt") -Encoding utf8 -Value "�
 
 $zip = Join-Path $out "G-routine_${version}_portable.zip"
 if (Test-Path $zip) { Remove-Item -Force $zip }
-Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+# 항목 이름에 항상 '/'를 쓴다. PS 5.1의 Compress-Archive/CreateFromDirectory는 '\'를 써서 일부 압축 해제 프로그램이 data 폴더를 만들지 못한다.
+$archive = [System.IO.Compression.ZipFile]::Open($zip, [System.IO.Compression.ZipArchiveMode]::Create)
+try {
+    $prefixLen = (Resolve-Path $stage).Path.TrimEnd('\').Length + 1
+    Get-ChildItem $stage -Recurse -File | ForEach-Object {
+        $entryName = $_.FullName.Substring($prefixLen).Replace('\', '/')
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $_.FullName, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+    }
+} finally { $archive.Dispose() }
 
 $installer = Get-ChildItem (Join-Path $root "src-tauri/target/release/bundle/nsis") -Filter "*.exe" | Select-Object -First 1
 if ($installer) { Copy-Item $installer.FullName $out }
