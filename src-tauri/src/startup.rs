@@ -6,7 +6,7 @@ use rusqlite::Connection;
 
 use crate::db::{self, settings, DB_FILE};
 use crate::domain::day::{business_day, fmt_day};
-use crate::error::{AppError, AppResult};
+use crate::error::{is_corruption, AppError, AppResult};
 use crate::state::{AppState, AppStatus};
 use crate::storage::{backup, location};
 use crate::templates;
@@ -14,7 +14,7 @@ use crate::templates;
 pub fn open_checked(dir: &Path) -> AppResult<Connection> {
     let conn = db::open(&dir.join(DB_FILE))?;
     if !db::integrity_ok(&conn)? {
-        return Err(AppError::invalid("데이터 파일이 손상되었어요"));
+        return Err(AppError::Corrupt);
     }
     Ok(conn)
 }
@@ -30,6 +30,7 @@ fn mark_ready(state: &AppState, dir: &Path, conn: Connection) {
     state.update_status(|s| {
         s.ready = true;
         s.corrupt = false;
+        s.open_failed = false;
         s.previous_dir = None;
         s.data_dir = Some(dir.display().to_string());
         s.suggested_dir = dir.display().to_string();
@@ -37,7 +38,9 @@ fn mark_ready(state: &AppState, dir: &Path, conn: Connection) {
 }
 
 /// 앱 시작 시 저장 위치를 찾고, DB가 있으면 열고 그날 첫 백업을 만든다.
+/// 열지 못하면 손상(corrupt)과 일시적 실패(open_failed)를 구분해 상태에 남긴다.
 pub fn boot(state: &AppState, exe_dir: &Path, candidates: &[PathBuf], now: NaiveDateTime) {
+    state.replace_conn(None);
     let res = location::resolve(exe_dir, &state.location_file, candidates);
     let suggested = res.dir.clone().unwrap_or_else(location::suggested_dir);
     state.update_status(|s| {
@@ -57,28 +60,53 @@ pub fn boot(state: &AppState, exe_dir: &Path, candidates: &[PathBuf], now: Naive
             let _ = run_daily_backup(&conn, &dir, now);
             mark_ready(state, &dir, conn);
         }
-        Err(_) => state.update_status(|s| {
-            s.corrupt = true;
-            s.previous_dir = Some(dir.display().to_string());
-        }),
+        Err(e) => {
+            let corrupt = is_corruption(&e);
+            state.update_status(|s| {
+                s.corrupt = corrupt;
+                s.open_failed = !corrupt;
+                s.previous_dir = Some(dir.display().to_string());
+            });
+        }
     }
 }
 
 /// 첫 실행 설정. 폴더에 DB가 이미 있으면 그대로 연결하고 템플릿은 무시한다.
+/// 그 DB가 손상되었으면 옆에 보관(quarantine)하고 템플릿으로 새로 시작한다.
 pub fn setup(state: &AppState, dir: &Path, template: &str, now: NaiveDateTime) -> AppResult<()> {
     templates::seeds(template)?;
     let st = state.status();
-    let dir: PathBuf = if st.portable { PathBuf::from(&st.suggested_dir) } else { dir.to_path_buf() };
+    let dir: PathBuf = if st.portable {
+        PathBuf::from(&st.suggested_dir)
+    } else {
+        if dir.as_os_str().is_empty() {
+            return Err(AppError::invalid("저장할 폴더를 골라 주세요"));
+        }
+        location::normalize_data_dir(dir)
+    };
     if dir.as_os_str().is_empty() {
         return Err(AppError::invalid("저장할 폴더를 골라 주세요"));
     }
     fs::create_dir_all(&dir)?;
-    let conn = if dir.join(DB_FILE).is_file() {
-        open_checked(&dir)?
+    let existing = if dir.join(DB_FILE).is_file() {
+        match open_checked(&dir) {
+            Ok(c) => Some(c),
+            Err(e) if is_corruption(&e) => {
+                backup::quarantine_db(&dir)?;
+                None
+            }
+            Err(e) => return Err(e),
+        }
     } else {
-        let c = db::open(&dir.join(DB_FILE))?;
-        templates::apply(&c, template, now)?;
-        c
+        None
+    };
+    let conn = match existing {
+        Some(c) => c,
+        None => {
+            let c = db::open(&dir.join(DB_FILE))?;
+            templates::apply(&c, template, now)?;
+            c
+        }
     };
     if !st.portable {
         location::write_location(&state.location_file, &dir)?;
@@ -106,7 +134,10 @@ pub fn restore(state: &AppState, now: NaiveDateTime) -> AppResult<()> {
 }
 
 /// 저장 폴더 변경. 새 폴더에 DB가 있으면 그것에 연결하고, 없으면 현재 DB를 복사한다.
-pub fn change_dir(state: &AppState, new_dir: &Path) -> AppResult<()> {
+/// 고른 폴더는 자동 탐색되도록 `…\G-routine\data` 모양으로 맞춘다.
+pub fn change_dir(state: &AppState, chosen: &Path, now: NaiveDateTime) -> AppResult<()> {
+    let new_dir = location::normalize_data_dir(chosen);
+    let new_dir = new_dir.as_path();
     let st = state.status();
     if st.portable {
         return Err(AppError::invalid("포터블 모드에서는 저장 위치를 바꿀 수 없어요"));
@@ -117,13 +148,22 @@ pub fn change_dir(state: &AppState, new_dir: &Path) -> AppResult<()> {
     fs::create_dir_all(new_dir)?;
     let target = new_dir.join(DB_FILE);
     if !target.is_file() {
-        state.with_conn(|c| {
-            c.execute("VACUUM INTO ?1", [target.to_string_lossy().to_string()])?;
-            Ok(())
-        })?;
+        let temp = new_dir.join(format!("{DB_FILE}.tmp"));
+        let _ = fs::remove_file(&temp);
+        let copied = state
+            .with_conn(|c| {
+                c.execute("VACUUM INTO ?1", [temp.to_string_lossy().to_string()])?;
+                Ok(())
+            })
+            .and_then(|_| fs::rename(&temp, &target).map_err(AppError::from));
+        if let Err(e) = copied {
+            let _ = fs::remove_file(&temp);
+            return Err(e);
+        }
     }
     let conn = open_checked(new_dir)?;
     location::write_location(&state.location_file, new_dir)?;
+    let _ = run_daily_backup(&conn, new_dir, now);
     mark_ready(state, new_dir, conn);
     Ok(())
 }
@@ -138,7 +178,19 @@ mod tests {
     const NOW: &str = "2026-10-05 09:00";
 
     fn state_in(root: &Path) -> AppState {
-        AppState::new(root.join("cfg").join("location.json"))
+        AppState::new(root.join("cfg").join("location.json"), root.join("app"))
+    }
+
+    fn data_in(root: &Path, name: &str) -> PathBuf {
+        root.join(name).join("G-routine").join("data")
+    }
+
+    fn corrupt_files(dir: &Path) -> Vec<String> {
+        fs::read_dir(dir)
+            .unwrap()
+            .filter_map(|e| e.ok()?.file_name().into_string().ok())
+            .filter(|n| n.starts_with(&format!("{DB_FILE}.corrupt-")))
+            .collect()
     }
 
     fn routine_count(s: &AppState) -> usize {
@@ -186,7 +238,7 @@ mod tests {
     #[test]
     fn setup_on_existing_db_keeps_data_and_ignores_template() {
         let t = tempfile::tempdir().unwrap();
-        let data = t.path().join("data");
+        let data = data_in(t.path(), "D");
         {
             let s = state_in(t.path());
             setup(&s, &data, "subject", at(NOW)).unwrap();
@@ -194,6 +246,18 @@ mod tests {
         let s = state_in(t.path());
         setup(&s, &data, "homeroom", at(NOW)).unwrap();
         assert_eq!(routine_count(&s), 4);
+    }
+
+    #[test]
+    fn setup_normalizes_chosen_folder_to_g_routine_data() {
+        let t = tempfile::tempdir().unwrap();
+        let s = state_in(t.path());
+        let parent = t.path().join("D");
+        setup(&s, &parent, "empty", at(NOW)).unwrap();
+        let data = data_in(t.path(), "D");
+        assert!(data.join(DB_FILE).is_file());
+        assert_eq!(s.status().data_dir, Some(data.display().to_string()));
+        assert_eq!(location::read_location(&s.location_file), Some(data));
     }
 
     #[test]
@@ -217,13 +281,13 @@ mod tests {
         setup(&s, Path::new("ignored"), "empty", at(NOW)).unwrap();
         assert!(exe.join("data").join(DB_FILE).is_file());
         assert!(!s.location_file.exists());
-        assert!(change_dir(&s, &t.path().join("other")).is_err());
+        assert!(change_dir(&s, &t.path().join("other"), at(NOW)).is_err());
     }
 
     #[test]
     fn corrupt_db_is_reported_and_restorable_from_backup() {
         let t = tempfile::tempdir().unwrap();
-        let data = t.path().join("data");
+        let data = data_in(t.path(), "D");
         {
             let s = state_in(t.path());
             setup(&s, &data, "homeroom", at(NOW)).unwrap();
@@ -232,24 +296,97 @@ mod tests {
         let s = state_in(t.path());
         boot(&s, &t.path().join("app"), &[], at(NOW));
         let st = s.status();
-        assert!(st.corrupt && !st.ready);
+        assert!(st.corrupt && !st.open_failed && !st.ready);
         assert_eq!(st.previous_dir, Some(data.display().to_string()));
 
         restore(&s, at(NOW)).unwrap();
         assert!(s.status().ready);
         assert_eq!(routine_count(&s), 6);
+        assert_eq!(corrupt_files(&data).len(), 1);
+    }
+
+    #[test]
+    fn is_corruption_distinguishes_garbage_from_cannot_open() {
+        let t = tempfile::tempdir().unwrap();
+        fs::write(t.path().join(DB_FILE), b"this is not a database file at all").unwrap();
+        let err = open_checked(t.path()).err().expect("garbage must not open");
+        assert!(is_corruption(&err));
+        assert!(is_corruption(&AppError::Corrupt));
+
+        let cant_open = AppError::Db(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CANTOPEN),
+            None,
+        ));
+        assert!(!is_corruption(&cant_open));
+        assert!(!is_corruption(&AppError::invalid("x")));
+    }
+
+    #[test]
+    fn locked_db_reports_open_failed_and_retry_succeeds_after_unlock() {
+        let t = tempfile::tempdir().unwrap();
+        let data = data_in(t.path(), "D");
+        {
+            let s = state_in(t.path());
+            setup(&s, &data, "subject", at(NOW)).unwrap();
+        }
+        let locker = Connection::open(data.join(DB_FILE)).unwrap();
+        locker.execute_batch("BEGIN EXCLUSIVE").unwrap();
+
+        let s = state_in(t.path());
+        boot(&s, &t.path().join("app"), &[], at(NOW)); // busy_timeout(3초) 뒤 실패
+        let st = s.status();
+        assert!(st.open_failed && !st.corrupt && !st.ready);
+        assert_eq!(st.previous_dir, Some(data.display().to_string()));
+        assert!(corrupt_files(&data).is_empty());
+
+        locker.execute_batch("ROLLBACK").unwrap();
+        drop(locker);
+        boot(&s, &s.exe_dir.clone(), &[], at(NOW));
+        let st = s.status();
+        assert!(st.ready && !st.open_failed);
+        assert_eq!(routine_count(&s), 4);
+    }
+
+    #[test]
+    fn setup_on_garbage_db_quarantines_it_and_starts_fresh() {
+        let t = tempfile::tempdir().unwrap();
+        let data = data_in(t.path(), "D");
+        fs::create_dir_all(&data).unwrap();
+        fs::write(data.join(DB_FILE), b"this is not a database file at all").unwrap();
+
+        let s = state_in(t.path());
+        setup(&s, &data, "homeroom", at(NOW)).unwrap();
+        assert!(s.status().ready);
+        assert_eq!(routine_count(&s), 6);
+        let kept = corrupt_files(&data);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(fs::read(data.join(&kept[0])).unwrap(), b"this is not a database file at all");
     }
 
     #[test]
     fn change_dir_copies_database_and_updates_location() {
         let t = tempfile::tempdir().unwrap();
         let s = state_in(t.path());
-        setup(&s, &t.path().join("a"), "subject", at(NOW)).unwrap();
-        let b = t.path().join("b");
-        change_dir(&s, &b).unwrap();
+        setup(&s, &data_in(t.path(), "A"), "subject", at(NOW)).unwrap();
+        let b = data_in(t.path(), "B");
+        change_dir(&s, &b, at(NOW)).unwrap();
         assert!(b.join(DB_FILE).is_file());
+        assert!(!b.join(format!("{DB_FILE}.tmp")).exists());
+        assert!(b.join("backups").join("g-routine-2026-10-05.db").is_file());
         assert_eq!(s.status().data_dir, Some(b.display().to_string()));
         assert_eq!(location::read_location(&s.location_file), Some(b));
         assert_eq!(routine_count(&s), 4);
+    }
+
+    #[test]
+    fn change_dir_into_parent_folder_lands_in_g_routine_data() {
+        let t = tempfile::tempdir().unwrap();
+        let s = state_in(t.path());
+        setup(&s, &data_in(t.path(), "A"), "subject", at(NOW)).unwrap();
+        change_dir(&s, &t.path().join("D"), at(NOW)).unwrap();
+        let landed = data_in(t.path(), "D");
+        assert!(landed.join(DB_FILE).is_file());
+        assert_eq!(s.status().data_dir, Some(landed.display().to_string()));
+        assert_eq!(location::read_location(&s.location_file), Some(landed));
     }
 }

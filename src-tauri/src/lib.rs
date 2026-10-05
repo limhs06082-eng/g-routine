@@ -35,7 +35,7 @@ pub fn run() {
                 .parent()
                 .map(|p| p.to_path_buf())
                 .unwrap_or_default();
-            let state = state::AppState::new(location_file);
+            let state = state::AppState::new(location_file, exe_dir.clone());
             startup::boot(&state, &exe_dir, &storage::location::drive_candidates(), now());
             app.manage(state);
             shell::startup(app.handle())?;
@@ -46,6 +46,8 @@ pub fn run() {
             commands::get_status,
             commands::setup,
             commands::restore_backup,
+            commands::retry_boot,
+            commands::inspect_data_dir,
             commands::get_today,
             commands::set_done,
             commands::quick_add,

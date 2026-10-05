@@ -23,6 +23,14 @@ pub fn show_widget(app: &AppHandle) {
     }
 }
 
+/// 부팅 · 자동 시작 때: 보이게만 하고 포커스는 빼앗지 않는다.
+pub fn show_widget_quietly(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window(WIDGET) {
+        let _ = w.show();
+        let _ = w.unminimize();
+    }
+}
+
 pub fn hide_widget(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(WIDGET) {
         let _ = w.hide();

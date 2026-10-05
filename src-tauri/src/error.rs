@@ -7,6 +7,8 @@ pub enum AppError {
     Io(std::io::Error),
     Json(serde_json::Error),
     Invalid(String),
+    /// DB 파일은 열렸지만 무결성 검사(quick_check)를 통과하지 못함
+    Corrupt,
     NotReady,
 }
 
@@ -23,12 +25,25 @@ impl fmt::Display for AppError {
             AppError::Io(e) => write!(f, "파일을 다루지 못했어요 ({e})"),
             AppError::Json(e) => write!(f, "백업 파일 형식이 올바르지 않아요 ({e})"),
             AppError::Invalid(m) => write!(f, "{m}"),
+            AppError::Corrupt => write!(f, "데이터 파일이 손상되었어요"),
             AppError::NotReady => write!(f, "아직 시작 설정을 마치지 않았어요"),
         }
     }
 }
 
 impl std::error::Error for AppError {}
+
+/// 파일이 손상되었다는 뜻의 오류인지 (잠김 · 권한 같은 "지금은 못 여는" 오류와 구분).
+pub fn is_corruption(err: &AppError) -> bool {
+    use rusqlite::ErrorCode;
+    match err {
+        AppError::Corrupt => true,
+        AppError::Db(rusqlite::Error::SqliteFailure(e, _)) => {
+            matches!(e.code, ErrorCode::NotADatabase | ErrorCode::DatabaseCorrupt)
+        }
+        _ => false,
+    }
+}
 
 impl From<rusqlite::Error> for AppError {
     fn from(e: rusqlite::Error) -> Self {

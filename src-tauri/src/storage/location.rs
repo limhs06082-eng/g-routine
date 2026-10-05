@@ -82,6 +82,38 @@ pub fn drive_candidates() -> Vec<PathBuf> {
         .collect()
 }
 
+/// 고른 폴더를 자동 탐색되는 모양(`…\G-routine\data`)으로 맞춘다.
+/// 이미 DB가 있는 폴더는 그대로 쓴다 (기존 데이터 우선).
+pub fn normalize_data_dir(chosen: &Path) -> PathBuf {
+    if chosen.join(DB_FILE).is_file() {
+        return chosen.to_path_buf();
+    }
+    let names: Vec<String> = chosen
+        .components()
+        .filter_map(|c| match c {
+            std::path::Component::Normal(n) => Some(n.to_string_lossy().to_lowercase()),
+            _ => None,
+        })
+        .collect();
+    if names.len() >= 2 && names[names.len() - 2] == "g-routine" && names[names.len() - 1] == "data" {
+        return chosen.to_path_buf();
+    }
+    chosen.join("G-routine").join("data")
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataDirInfo {
+    pub normalized: String,
+    pub has_data: bool,
+}
+
+/// 고른 폴더가 실제로 쓰일 경로와, 거기에 이미 G-routine 데이터가 있는지 알려 준다.
+pub fn inspect_data_dir(chosen: &Path) -> DataDirInfo {
+    let dir = normalize_data_dir(chosen);
+    DataDirInfo { normalized: dir.display().to_string(), has_data: dir.join(DB_FILE).is_file() }
+}
+
 pub fn suggested_dir() -> PathBuf {
     let d = PathBuf::from("D:\\");
     if d.exists() {
@@ -145,5 +177,38 @@ mod tests {
         let r = resolve(&t.path().join("app"), &loc, &[]);
         assert_eq!(r.dir, None);
         assert_eq!(r.previous, Some(gone));
+    }
+
+    #[test]
+    fn normalize_appends_g_routine_data_to_plain_folders() {
+        assert_eq!(normalize_data_dir(Path::new("D:\\")), PathBuf::from("D:\\").join("G-routine").join("data"));
+        assert_eq!(
+            normalize_data_dir(Path::new("D:\\내 자료")),
+            PathBuf::from("D:\\내 자료").join("G-routine").join("data")
+        );
+    }
+
+    #[test]
+    fn normalize_keeps_g_routine_data_and_folders_with_db() {
+        let t = tempfile::tempdir().unwrap();
+        let already = t.path().join("D").join("G-routine").join("data");
+        assert_eq!(normalize_data_dir(&already), already);
+        let lower = t.path().join("D").join("g-routine").join("DATA");
+        assert_eq!(normalize_data_dir(&lower), lower);
+        #[cfg(windows)]
+        assert_eq!(normalize_data_dir(Path::new("D:\\G-routine\\data")), PathBuf::from("D:\\G-routine\\data"));
+
+        let custom = t.path().join("내 자료");
+        touch_db(&custom);
+        assert_eq!(normalize_data_dir(&custom), custom);
+        assert_eq!(
+            inspect_data_dir(&custom),
+            DataDirInfo { normalized: custom.display().to_string(), has_data: true }
+        );
+        let empty = t.path().join("E");
+        assert_eq!(
+            inspect_data_dir(&empty),
+            DataDirInfo { normalized: empty.join("G-routine").join("data").display().to_string(), has_data: false }
+        );
     }
 }

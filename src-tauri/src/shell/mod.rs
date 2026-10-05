@@ -18,7 +18,7 @@ pub fn startup(app: &AppHandle) -> tauri::Result<()> {
         apply_all(app, s);
     }
     window::place_widget(app, saved)?;
-    window::show_widget(app);
+    window::show_widget_quietly(app);
     window::spawn_day_watcher(app.clone());
     Ok(())
 }

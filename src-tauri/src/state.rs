@@ -13,6 +13,8 @@ use crate::error::{AppError, AppResult};
 pub struct AppStatus {
     pub ready: bool,
     pub corrupt: bool,
+    /// DB 파일이 있지만 지금은 열 수 없음 (다른 프로그램이 잠금 · 권한 등). 손상과 다르다.
+    pub open_failed: bool,
     pub portable: bool,
     pub previous_dir: Option<String>,
     pub suggested_dir: String,
@@ -23,16 +25,19 @@ pub struct AppState {
     conn: Mutex<Option<Connection>>,
     status: Mutex<AppStatus>,
     pub location_file: PathBuf,
+    /// 실행 파일 폴더 (포터블 모드 판단 · 다시 시도에 쓴다)
+    pub exe_dir: PathBuf,
     pub move_seq: AtomicU64,
     pub programmatic_move: Mutex<Option<Instant>>,
 }
 
 impl AppState {
-    pub fn new(location_file: PathBuf) -> Self {
+    pub fn new(location_file: PathBuf, exe_dir: PathBuf) -> Self {
         AppState {
             conn: Mutex::new(None),
             status: Mutex::new(AppStatus::default()),
             location_file,
+            exe_dir,
             move_seq: AtomicU64::new(0),
             programmatic_move: Mutex::new(None),
         }

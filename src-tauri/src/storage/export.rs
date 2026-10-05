@@ -170,7 +170,9 @@ pub fn write_file(path: &Path, b: &BackupFile) -> AppResult<()> {
 }
 
 pub fn read_file(path: &Path) -> AppResult<BackupFile> {
-    let b: BackupFile = serde_json::from_str(&fs::read_to_string(path)?)?;
+    let text = fs::read_to_string(path)?;
+    // 메모장 등이 붙이는 UTF-8 BOM은 JSON 파서가 받지 않으므로 떼어 낸다
+    let b: BackupFile = serde_json::from_str(text.strip_prefix('\u{feff}').unwrap_or(&text))?;
     validate(&b)?;
     Ok(b)
 }
@@ -279,5 +281,18 @@ mod tests {
         let _ = import(&dst, &backup);
         let after = dst.query_row("SELECT COUNT(*) FROM routines", [], |r| r.get::<_, i64>(0)).unwrap();
         assert_eq!(before, after);
+    }
+
+    #[test]
+    fn reads_backup_with_utf8_bom() {
+        let src = open_in_memory().unwrap();
+        service::create_routine(&src, input_daily("출결 확인"), at("2026-10-05 09:00")).unwrap();
+        let backup = export(&src, "2026-10-05T10:00:00").unwrap();
+        let t = tempfile::tempdir().unwrap();
+        let path = t.path().join("bom.json");
+        let mut bytes = "\u{feff}".as_bytes().to_vec();
+        bytes.extend(serde_json::to_string_pretty(&backup).unwrap().into_bytes());
+        fs::write(&path, bytes).unwrap();
+        assert_eq!(read_file(&path).unwrap(), backup);
     }
 }

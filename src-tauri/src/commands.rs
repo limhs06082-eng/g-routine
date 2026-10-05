@@ -9,7 +9,7 @@ use crate::error::{AppError, AppResult};
 use crate::model::{DayItem, DaySummary, Routine, RoutineInput, Settings, TodayView};
 use crate::shell::{self, window};
 use crate::state::{AppState, AppStatus};
-use crate::storage::export;
+use crate::storage::{export, location};
 use crate::{now, service, startup, DATA_CHANGED};
 
 fn changed(app: &AppHandle) {
@@ -35,6 +35,26 @@ pub fn restore_backup(app: AppHandle, state: State<'_, AppState>) -> AppResult<(
     shell::after_ready(&app);
     changed(&app);
     Ok(())
+}
+
+/// 데이터 파일을 지금 열 수 없었을 때(잠김 등) 시작 과정을 다시 시도한다.
+/// 잠긴 DB는 busy_timeout(3초)만큼 기다리므로 메인 스레드를 막지 않게 async로 둔다.
+#[tauri::command]
+pub async fn retry_boot(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    if state.status().ready {
+        return Ok(());
+    }
+    startup::boot(&state, &state.exe_dir, &location::drive_candidates(), now());
+    if state.status().ready {
+        shell::after_ready(&app);
+    }
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn inspect_data_dir(dir: String) -> location::DataDirInfo {
+    location::inspect_data_dir(Path::new(&dir))
 }
 
 #[tauri::command]
@@ -129,13 +149,13 @@ pub fn open_link(app: AppHandle, state: State<'_, AppState>, routine_id: i64) ->
 }
 
 #[tauri::command]
-pub fn export_backup(state: State<'_, AppState>, path: String) -> AppResult<()> {
+pub async fn export_backup(state: State<'_, AppState>, path: String) -> AppResult<()> {
     let backup = state.with_conn(|c| export::export(c, &fmt_ts(now())))?;
     export::write_file(Path::new(&path), &backup)
 }
 
 #[tauri::command]
-pub fn import_backup(app: AppHandle, state: State<'_, AppState>, path: String) -> AppResult<()> {
+pub async fn import_backup(app: AppHandle, state: State<'_, AppState>, path: String) -> AppResult<()> {
     let backup = export::read_file(Path::new(&path))?;
     state.with_conn(|c| {
         export::import(c, &backup)?;
@@ -147,8 +167,9 @@ pub fn import_backup(app: AppHandle, state: State<'_, AppState>, path: String) -
 }
 
 #[tauri::command]
-pub fn change_data_dir(app: AppHandle, state: State<'_, AppState>, dir: String) -> AppResult<()> {
-    startup::change_dir(&state, Path::new(&dir))?;
+pub async fn change_data_dir(app: AppHandle, state: State<'_, AppState>, dir: String) -> AppResult<()> {
+    startup::change_dir(&state, Path::new(&dir), now())?;
+    shell::after_ready(&app);
     changed(&app);
     Ok(())
 }
