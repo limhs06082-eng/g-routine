@@ -1,2 +1,108 @@
-/* src/index.css (Task 7에서 교체) */
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Pretendard Variable", Pretendard, "Malgun Gothic", system-ui, sans-serif;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--soft-3);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-soft: var(--soft);
+  --color-soft-2: var(--soft-2);
+  --color-soft-3: var(--soft-3);
+  --color-strong: var(--strong);
+  --color-ink: var(--ink);
+  --color-danger: #a32d2d;
+  --color-danger-soft: #fcebeb;
+  --color-success: #5dcaa5;
+  --color-chip-daily: #eeedfe;
+  --color-chip-daily-ink: #3c3489;
+  --color-chip-weekdays: #e1f5ee;
+  --color-chip-weekdays-ink: #085041;
+  --color-chip-once: #faece7;
+  --color-chip-once-ink: #993c1d;
+  --color-chip-due: #faeeda;
+  --color-chip-due-ink: #854f0b;
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #2c2c2a;
+  --muted: #f4f3ef;
+  --muted-foreground: #888780;
+  --border: #e8e6df;
+  --input: #d3d1c7;
+  --primary-foreground: #ffffff;
+  /* lavender (기본) */
+  --primary: #7f77dd;
+  --soft: #eeedfe;
+  --soft-2: #cecbf6;
+  --soft-3: #afa9ec;
+  --strong: #534ab7;
+  --ink: #3c3489;
+}
+
+[data-theme="mint"] {
+  --primary: #1d9e75;
+  --soft: #e1f5ee;
+  --soft-2: #9fe1cb;
+  --soft-3: #5dcaa5;
+  --strong: #0f6e56;
+  --ink: #085041;
+}
+
+[data-theme="peach"] {
+  --primary: #d85a30;
+  --soft: #faece7;
+  --soft-2: #f5c4b3;
+  --soft-3: #f0997b;
+  --strong: #993c1d;
+  --ink: #712b13;
+}
+
+[data-theme="sky"] {
+  --primary: #378add;
+  --soft: #e6f1fb;
+  --soft-2: #b5d4f4;
+  --soft-3: #85b7eb;
+  --strong: #185fa5;
+  --ink: #0c447c;
+}
+
+[data-theme="lemon"] {
+  --primary: #ba7517;
+  --soft: #faeeda;
+  --soft-2: #fac775;
+  --soft-3: #ef9f27;
+  --strong: #854f0b;
+  --ink: #633806;
+}
+
+html,
+body {
+  margin: 0;
+  background: transparent;
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+}
+
+html[data-window="widget"] body {
+  overflow: hidden;
+  user-select: none;
+}
+
+html[data-window="manager"] body {
+  background: var(--background);
+}
+
+html[data-preview="true"][data-window="widget"] #root {
+  width: 280px;
+  margin: 24px;
+}
