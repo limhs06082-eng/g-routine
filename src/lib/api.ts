@@ -63,16 +63,26 @@ export interface Settings {
 export interface AppStatus {
   ready: boolean;
   corrupt: boolean;
+  /** DB 파일이 있지만 지금은 열 수 없음 (다른 프로그램이 사용 중 등). 손상과 다르다. */
+  openFailed: boolean;
   portable: boolean;
   previousDir: string | null;
   suggestedDir: string;
   dataDir: string | null;
 }
 
+export interface DataDirInfo {
+  /** 실제로 쓰일 폴더 (…\G-routine\data 모양, 이미 데이터가 있는 폴더면 그대로) */
+  normalized: string;
+  hasData: boolean;
+}
+
 export const api = {
   status: () => invoke<AppStatus>("get_status"),
   setup: (dir: string, template: TemplateName) => invoke<void>("setup", { dir, template }),
   restoreBackup: () => invoke<void>("restore_backup"),
+  retryBoot: () => invoke<void>("retry_boot"),
+  inspectDataDir: (dir: string) => invoke<DataDirInfo>("inspect_data_dir", { dir }),
   today: () => invoke<TodayView>("get_today"),
   setDone: (itemId: number, done: boolean) => invoke<void>("set_done", { itemId, done }),
   quickAdd: (title: string) => invoke<void>("quick_add", { title }),

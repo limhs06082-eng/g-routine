@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Download, FolderOpen, Info, Upload } from "lucide-react";
 import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,9 @@ interface Props {
 
 export function SettingsTab({ settings, status, onChange }: Props) {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [shownDir, setShownDir] = useState<string | null>(null);
+  const dataDir = shownDir ?? status.dataDir;
+  useEffect(() => setShownDir(null), [status.dataDir]);
 
   /** 대화상자 호출까지 포함해 실행한다. action이 false를 돌려주면(사용자가 취소) 성공 메시지를 띄우지 않는다. */
   async function run(action: () => Promise<unknown>, ok?: string) {
@@ -54,7 +57,17 @@ export function SettingsTab({ settings, status, onChange }: Props) {
     run(async () => {
       const picked = await open({ directory: true, title: "새 저장 폴더 선택" });
       if (typeof picked !== "string") return false;
-      await api.changeDataDir(picked);
+      const info = await api.inspectDataDir(picked);
+      if (info.hasData) {
+        const ok = await confirm(
+          "선택한 폴더에 이미 G-routine 데이터가 있어요. 지금 데이터 대신 그 데이터를 사용할까요? 지금 데이터는 원래 폴더에 그대로 남아요.",
+          { title: "저장 위치 변경", kind: "warning" },
+        );
+        if (!ok) return false;
+      }
+      await api.changeDataDir(info.normalized);
+      // 상태가 새로 읽힐 때까지 실제로 쓰이는 경로(…\G-routine\data)를 먼저 보여 준다
+      setShownDir(info.normalized);
     }, "저장 위치를 바꿨어요");
 
   const exportBackup = () =>
@@ -119,8 +132,8 @@ export function SettingsTab({ settings, status, onChange }: Props) {
       <div className="border-b border-border py-3">
         <div className="mb-1.5 text-sm">데이터 저장 위치</div>
         <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1 truncate rounded-lg bg-muted px-3 py-2 font-mono text-xs" title={status.dataDir ?? ""}>
-            {status.portable ? "포터블 모드 · 프로그램 폴더의 data" : status.dataDir}
+          <div className="min-w-0 flex-1 truncate rounded-lg bg-muted px-3 py-2 font-mono text-xs" title={dataDir ?? ""}>
+            {status.portable ? "포터블 모드 · 프로그램 폴더의 data" : dataDir}
           </div>
           {!status.portable && (
             <Button variant="outline" size="sm" onClick={() => void changeDir()}>

@@ -3,6 +3,7 @@ import { FolderOpen, Info } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/button";
 import { api, errorMessage, type AppStatus, type TemplateName } from "@/lib/api";
+import { normalizeDataDir } from "@/lib/dataDir";
 import { cn } from "@/lib/utils";
 
 const TEMPLATES: { value: TemplateName; title: string; desc: string }[] = [
@@ -19,7 +20,14 @@ export function Setup({ status }: { status: AppStatus }) {
 
   async function pick() {
     const picked = await open({ directory: true, title: "데이터를 저장할 폴더 선택" });
-    if (typeof picked === "string") setDir(picked);
+    if (typeof picked !== "string") return;
+    setDir(normalizeDataDir(picked));
+    try {
+      // 이미 데이터가 있는 폴더면 그대로 쓰는지 등은 앱(Rust)이 최종 판단한다
+      setDir((await api.inspectDataDir(picked)).normalized);
+    } catch {
+      // 표시용 경로라 실패해도 위의 값으로 둔다
+    }
   }
 
   async function run(action: () => Promise<void>) {
@@ -45,15 +53,24 @@ export function Setup({ status }: { status: AppStatus }) {
         </p>
       </div>
 
-      {status.corrupt && (
+      {status.openFailed && (
+        <div className="rounded-lg bg-chip-due p-2.5 text-xs leading-5 text-chip-due-ink">
+          데이터 파일을 열 수 없어요. 다른 프로그램이 사용 중일 수 있어요. 잠시 후 다시 시도해 주세요.
+          <Button size="sm" variant="outline" className="mt-2 w-full" disabled={busy} onClick={() => void run(api.retryBoot)}>
+            다시 시도
+          </Button>
+        </div>
+      )}
+      {!status.openFailed && status.corrupt && (
         <div className="rounded-lg bg-danger-soft p-2.5 text-xs text-danger">
           데이터 파일이 손상된 것 같아요. 자동 백업으로 되돌릴 수 있어요.
           <Button size="sm" variant="outline" className="mt-2 w-full" disabled={busy} onClick={() => void run(api.restoreBackup)}>
             최근 백업으로 복구
           </Button>
+          <p className="mt-2 leading-5">복구가 안 되면 아래에서 시작하기를 누르세요. 손상된 파일은 따로 보관돼요.</p>
         </div>
       )}
-      {!status.corrupt && status.previousDir && (
+      {!status.corrupt && !status.openFailed && status.previousDir && (
         <div className="rounded-lg bg-chip-due p-2.5 text-xs leading-5 text-chip-due-ink">
           예전 저장 폴더({status.previousDir})를 찾지 못했어요. 폴더를 다시 고르거나 새로 시작하세요.
         </div>
@@ -75,7 +92,7 @@ export function Setup({ status }: { status: AppStatus }) {
         )}
         <p className="flex gap-1 text-[11px] leading-4 text-muted-foreground">
           <Info className="mt-px size-3 shrink-0" />
-          복원 프로그램이 있는 PC는 D드라이브에 저장하세요. 이미 데이터가 있는 폴더를 고르면 그대로 불러와요.
+          복원 프로그램이 있는 PC는 D드라이브를 고르세요. 고른 폴더 안에 G-routine\data 폴더가 만들어져요.
         </p>
       </section>
 

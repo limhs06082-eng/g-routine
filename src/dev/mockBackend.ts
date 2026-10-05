@@ -1,5 +1,6 @@
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type { AppStatus, DayItem, DaySummary, Routine, RoutineInput, Settings, TodayView } from "@/lib/api";
+import { normalizeDataDir } from "@/lib/dataDir";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const dayStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -110,7 +111,7 @@ function historyDay(day: string): DayItem[] {
 }
 
 function status(): AppStatus {
-  return { ready, corrupt: false, portable: false, previousDir: null, suggestedDir: DATA_DIR, dataDir: ready ? DATA_DIR : null };
+  return { ready, corrupt: false, openFailed: false, portable: false, previousDir: null, suggestedDir: DATA_DIR, dataDir: ready ? DATA_DIR : null };
 }
 
 function changed() {
@@ -143,6 +144,11 @@ export function installMockBackend() {
         ready = true;
         changed();
         return null;
+      case "retry_boot":
+        changed();
+        return null;
+      case "inspect_data_dir":
+        return { normalized: normalizeDataDir(String(args.dir)), hasData: false };
       case "get_today":
         return today();
       case "set_done": {

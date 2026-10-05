@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { api } from "@/lib/api";
 import { useData, useSettings } from "@/lib/hooks";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -7,6 +8,17 @@ import { SettingsTab } from "./SettingsTab";
 
 export function ManagerApp() {
   const { data: status } = useData(api.status);
+
+  // 파일을 창에 떨어뜨려도 WebView가 그 파일로 이동하지 않게 막는다 (행 끌어 옮기기는 그대로 동작)
+  useEffect(() => {
+    const block = (e: DragEvent) => e.preventDefault();
+    document.addEventListener("dragover", block);
+    document.addEventListener("drop", block);
+    return () => {
+      document.removeEventListener("dragover", block);
+      document.removeEventListener("drop", block);
+    };
+  }, []);
   const ready = status?.ready ?? false;
   const { settings, update } = useSettings(ready);
 
