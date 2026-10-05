@@ -27,6 +27,11 @@ pub fn get_today(c: &Connection, now: NaiveDateTime) -> AppResult<TodayView> {
 }
 
 pub fn set_done(c: &Connection, item_id: i64, done: bool, now: NaiveDateTime) -> AppResult<()> {
+    let today_date = today(c, now)?;
+    let item_date = day_items::item_day(c, item_id)?;
+    if item_date != fmt_day(today_date) {
+        return Err(AppError::invalid("날짜가 바뀌었어요. 목록을 새로 불러올게요"));
+    }
     day_items::set_done(c, item_id, done, &fmt_ts(now))
 }
 
@@ -271,5 +276,47 @@ mod tests {
         assert!(create_routine(&c, input_daily(" "), at(MON)).is_err());
         assert!(quick_add(&c, "  ", at(MON)).is_err());
         assert!(list_routines(&c, at(MON)).unwrap().is_empty());
+    }
+
+    #[test]
+    fn set_done_rejects_past_business_day_pending() {
+        let c = open_in_memory().unwrap();
+        create_routine(&c, input_daily("과제"), at(MON)).unwrap();
+        let item = get_today(&c, at(MON)).unwrap().pending[0].clone();
+
+        // Attempt to complete MON item on TUE should fail
+        let err = set_done(&c, item.id, true, at(TUE));
+        assert!(err.is_err());
+        assert!(err.unwrap_err().to_string().contains("날짜가 바뀌었어요"));
+
+        // MON history should still show incomplete
+        let mon_history = history_day(&c, "2026-10-05").unwrap();
+        assert_eq!(mon_history[0].completed_at, None);
+    }
+
+    #[test]
+    fn set_done_rejects_past_business_day_completed() {
+        let c = open_in_memory().unwrap();
+        create_routine(&c, input_daily("과제"), at(MON)).unwrap();
+        let item = get_today(&c, at(MON)).unwrap().pending[0].clone();
+
+        // Complete on MON
+        set_done(&c, item.id, true, at(MON)).unwrap();
+
+        // Attempt to uncomplete on TUE should fail
+        let err = set_done(&c, item.id, false, at(TUE));
+        assert!(err.is_err());
+
+        // MON history should still show completed
+        let mon_history = history_day(&c, "2026-10-05").unwrap();
+        assert!(mon_history[0].completed_at.is_some());
+    }
+
+    #[test]
+    fn set_done_rejects_nonexistent_item() {
+        let c = open_in_memory().unwrap();
+        let err = set_done(&c, 9999, true, at(MON));
+        assert!(err.is_err());
+        assert!(err.unwrap_err().to_string().contains("항목을 찾을 수 없어요"));
     }
 }

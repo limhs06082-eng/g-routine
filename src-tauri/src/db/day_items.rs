@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use chrono::NaiveDate;
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use crate::domain::day::fmt_day;
 use crate::domain::rules::scheduled;
@@ -97,4 +97,10 @@ pub fn month_summary(c: &Connection, year: i32, month: u32) -> AppResult<Vec<Day
         .query_map([prefix], |r| Ok(DaySummary { day: r.get(0)?, total: r.get(1)?, completed: r.get(2)? }))?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
+}
+
+pub fn item_day(c: &Connection, item_id: i64) -> AppResult<String> {
+    c.query_row("SELECT day FROM day_items WHERE id = ?1", [item_id], |r| r.get(0))
+        .optional()?
+        .ok_or_else(|| AppError::invalid("항목을 찾을 수 없어요"))
 }
