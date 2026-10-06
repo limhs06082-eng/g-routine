@@ -117,6 +117,31 @@ pub fn quarantine_db(data_dir: &Path) -> AppResult<()> {
 /// 가장 최근의 정상 백업으로 DB를 되돌린다. 손상된 DB는 지우지 않고 옆에 보관한다.
 ///
 /// 백업은 새것부터 읽기 전용으로 검사한다. 호출하는 쪽은 이 DB의 연결을 먼저 닫아야 한다.
+/// 복구 중에 쓰는 임시 복구본 경로
+pub fn restore_tmp_path(data_dir: &Path) -> PathBuf {
+    data_dir.join(format!("{DB_FILE}.restore.tmp"))
+}
+
+/// 손상된 DB를 지우지 않고 보관한다. 본 파일은 복사본으로 남기고(본 파일은 그 자리에 그대로 둔다),
+/// 저널(-journal/-wal/-shm)은 옮겨 둔다. 저널이 남아 있으면 복구한 파일에 예전 변경이 다시 적용될 수 있다.
+fn preserve_corrupt_copy(data_dir: &Path) -> AppResult<()> {
+    let suffix = quarantine_suffix();
+    let db_path = data_dir.join(DB_FILE);
+    if db_path.exists() {
+        fs::copy(&db_path, free_name(&data_dir.join(format!("{DB_FILE}{suffix}"))))?;
+    }
+    for ext in ["-journal", "-wal", "-shm"] {
+        let from = data_dir.join(format!("{DB_FILE}{ext}"));
+        if from.exists() {
+            fs::rename(&from, free_name(&data_dir.join(format!("{DB_FILE}{ext}{suffix}"))))?;
+        }
+    }
+    Ok(())
+}
+
+/// 가장 최근의 정상 백업으로 DB를 되돌린다. 호출 전에 DB 연결을 모두 닫아야 한다.
+/// 순서: 백업 → 임시 복구본(검사) → 손상본 복사 보관 → 임시 복구본을 본 파일 위로 한 번에 교체.
+/// 어느 단계에서 전원이 꺼져도 g-routine.db는 손상본이나 복구본 중 하나로 늘 존재한다.
 pub fn restore_latest(data_dir: &Path) -> AppResult<()> {
     let mut backups = list_backups(&backups_dir(data_dir));
     backups.reverse(); // 새것부터
@@ -125,18 +150,40 @@ pub fn restore_latest(data_dir: &Path) -> AppResult<()> {
         return Err(AppError::invalid("복구할 수 있는 백업 파일이 없어요"));
     };
     let db_path = data_dir.join(DB_FILE);
-    let temp_path = data_dir.join(format!("{DB_FILE}.restore.tmp"));
+    let temp_path = restore_tmp_path(data_dir);
     let _ = fs::remove_file(&temp_path);
-    if let Err(e) = fs::copy(&backup_path, &temp_path) {
-        let _ = fs::remove_file(&temp_path);
-        return Err(e.into());
-    }
-    if let Err(e) = quarantine_db(data_dir) {
+    let prepared = fs::copy(&backup_path, &temp_path)
+        .map_err(AppError::from)
+        .and_then(|_| {
+            if is_valid_backup(&temp_path) {
+                Ok(())
+            } else {
+                Err(AppError::invalid("백업 파일을 복사하지 못했어요. 다시 시도해 주세요"))
+            }
+        })
+        .and_then(|_| preserve_corrupt_copy(data_dir));
+    if let Err(e) = prepared {
         let _ = fs::remove_file(&temp_path);
         return Err(e);
     }
+    // Windows에서 fs::rename은 기존 파일을 덮어쓰며 한 번에 바꾼다 (MOVEFILE_REPLACE_EXISTING).
     fs::rename(&temp_path, &db_path)?;
     Ok(())
+}
+
+/// 예전 버전에서 복구가 중간에 끊겨 본 DB 없이 복구본만 남은 경우, 시작할 때 마무리한다.
+/// 본 DB가 있으면 남은 복구본은 지운다. 복구본을 본 DB로 썼으면 true.
+pub fn recover_interrupted_restore(data_dir: &Path) -> bool {
+    let db_path = data_dir.join(DB_FILE);
+    let temp_path = restore_tmp_path(data_dir);
+    if !temp_path.exists() {
+        return false;
+    }
+    if db_path.exists() {
+        let _ = fs::remove_file(&temp_path);
+        return false;
+    }
+    is_valid_backup(&temp_path) && fs::rename(&temp_path, &db_path).is_ok()
 }
 
 #[cfg(test)]
@@ -250,5 +297,55 @@ mod tests {
         assert_eq!(fs::read(kept).unwrap(), b"broken");
         let c = db::open(&t.path().join(DB_FILE)).unwrap();
         assert!(db::integrity_ok(&c).unwrap());
+    }
+
+    #[test]
+    fn interrupted_restore_is_finished_from_the_leftover_copy() {
+        let t = tempfile::tempdir().unwrap();
+        {
+            let c = db::open(&t.path().join(DB_FILE)).unwrap();
+            c.execute(
+                "INSERT INTO routines (title, repeat_type, sort_order, created_at) VALUES ('복구된 루틴', 'daily', 0, '2026-10-05T00:00:00')",
+                [],
+            )
+            .unwrap();
+            daily_backup(&c, t.path(), "2026-10-05").unwrap();
+        }
+        // 예전 버전이 손상 파일을 옮긴 직후 멈춘 상태: 본 DB는 없고 복구본만 남아 있다
+        fs::remove_file(t.path().join(DB_FILE)).unwrap();
+        fs::copy(backups_dir(t.path()).join("g-routine-2026-10-05.db"), restore_tmp_path(t.path())).unwrap();
+
+        assert!(recover_interrupted_restore(t.path()));
+        assert_eq!(routine_titles(&t.path().join(DB_FILE)), vec!["복구된 루틴".to_string()]);
+        assert!(!restore_tmp_path(t.path()).exists());
+    }
+
+    #[test]
+    fn leftover_copy_is_ignored_when_invalid_and_cleared_when_db_exists() {
+        let t = tempfile::tempdir().unwrap();
+        fs::write(restore_tmp_path(t.path()), b"half written").unwrap();
+        assert!(!recover_interrupted_restore(t.path()));
+        assert!(!t.path().join(DB_FILE).exists());
+
+        drop(db::open(&t.path().join(DB_FILE)).unwrap());
+        assert!(!recover_interrupted_restore(t.path()));
+        assert!(!restore_tmp_path(t.path()).exists());
+        assert!(t.path().join(DB_FILE).exists());
+    }
+
+    #[test]
+    fn restore_never_moves_the_live_db_away() {
+        let t = tempfile::tempdir().unwrap();
+        {
+            let c = db::open(&t.path().join(DB_FILE)).unwrap();
+            daily_backup(&c, t.path(), "2026-10-05").unwrap();
+        }
+        fs::write(t.path().join(DB_FILE), b"broken").unwrap();
+        restore_latest(t.path()).unwrap();
+        // 손상본은 복사로 보관되고, 본 파일은 복구본으로 한 번에 바뀐다
+        let kept = t.path().join(&corrupt_names(t.path(), DB_FILE)[0]);
+        assert_eq!(fs::read(kept).unwrap(), b"broken");
+        assert!(!restore_tmp_path(t.path()).exists());
+        assert!(db::integrity_ok(&db::open(&t.path().join(DB_FILE)).unwrap()).unwrap());
     }
 }

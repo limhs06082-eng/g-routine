@@ -41,6 +41,11 @@ fn mark_ready(state: &AppState, dir: &Path, conn: Connection) {
 /// 열지 못하면 손상(corrupt)과 일시적 실패(open_failed)를 구분해 상태에 남긴다.
 pub fn boot(state: &AppState, exe_dir: &Path, candidates: &[PathBuf], now: NaiveDateTime) {
     state.replace_conn(None);
+    // 복구가 중간에 끊겨 본 DB 없이 복구본만 남은 폴더가 있으면, 저장 위치를 찾기 전에 마무리한다.
+    let known_dirs = [Some(exe_dir.join("data")), location::read_location(&state.location_file)];
+    for dir in known_dirs.iter().flatten().chain(candidates.iter()) {
+        backup::recover_interrupted_restore(dir);
+    }
     let res = location::resolve(exe_dir, &state.location_file, candidates);
     let suggested = res.dir.clone().unwrap_or_else(location::suggested_dir);
     state.update_status(|s| {
@@ -388,5 +393,24 @@ mod tests {
         assert!(landed.join(DB_FILE).is_file());
         assert_eq!(s.status().data_dir, Some(landed.display().to_string()));
         assert_eq!(location::read_location(&s.location_file), Some(landed));
+    }
+
+    #[test]
+    fn boot_finishes_a_restore_that_was_interrupted_by_power_loss() {
+        let t = tempfile::tempdir().unwrap();
+        let data = t.path().join("D").join("G-routine").join("data");
+        {
+            let s = state_in(t.path());
+            setup(&s, &data, "subject", at(NOW)).unwrap();
+        }
+        // 예전 버전의 복구가 손상 파일을 옮긴 직후 끊긴 상태
+        let backup = data.join("backups").join("g-routine-2026-10-05.db");
+        fs::rename(data.join(DB_FILE), data.join(format!("{DB_FILE}.corrupt-20261005-090000"))).unwrap();
+        fs::copy(&backup, crate::storage::backup::restore_tmp_path(&data)).unwrap();
+
+        let s = state_in(t.path());
+        boot(&s, &t.path().join("app"), &[], at(NOW));
+        assert!(s.status().ready);
+        assert_eq!(routine_count(&s), 4);
     }
 }
