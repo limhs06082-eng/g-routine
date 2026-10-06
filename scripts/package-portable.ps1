@@ -25,6 +25,7 @@ try {
     }
 } finally { $archive.Dispose() }
 
-$installer = Get-ChildItem (Join-Path $root "src-tauri/target/release/bundle/nsis") -Filter "*.exe" | Select-Object -First 1
-if ($installer) { Copy-Item $installer.FullName $out }
+# 이번 버전의 설치 파일만 복사한다 (bundle/nsis에는 예전 버전 파일도 남아 있을 수 있다)
+$installer = Join-Path $root "src-tauri/target/release/bundle/nsis/G-routine_${version}_x64-setup.exe"
+if (Test-Path $installer) { Copy-Item $installer $out }
 Get-ChildItem $out -File | ForEach-Object { "{0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
