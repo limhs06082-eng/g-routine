@@ -1,6 +1,7 @@
 pub mod memory;
 pub mod position;
 pub mod tray;
+pub mod update;
 pub mod window;
 
 use tauri::{AppHandle, Manager};

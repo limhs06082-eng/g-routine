@@ -137,6 +137,7 @@ export function installMockBackend() {
     const args = (payload ?? {}) as Record<string, unknown>;
     if (cmd.startsWith("plugin:event|")) return 0;
     if (cmd.startsWith("plugin:dialog|")) return null;
+    if (cmd === "plugin:app|version") return "0.1.0";
     switch (cmd) {
       case "get_status":
         return status();

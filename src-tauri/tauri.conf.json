@@ -37,7 +37,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "shortDescription": "교사를 위한 매일 루틴 위젯",
     "icon": [
       "icons/32x32.png",
@@ -49,8 +51,22 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["Korean"],
+        "languages": [
+          "Korean"
+        ],
         "displayLanguageSelector": false
+      }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgyNDlEMkM1MzA5NkEwNzkKUldSNW9KWXd4ZEpKZ2hYallNL2FFOFlpazFpRzU0Nmx3eEdHUGFyNEprbVJUSlZveHRjYUtTSjcK",
+      "endpoints": [
+        "https://github.com/limhs06082-eng/g-routine/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

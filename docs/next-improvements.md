@@ -26,7 +26,7 @@ MVP(v0.1.0)를 개발·검증하면서 나온 개선 후보를 우선순위대�
 
 ## C. 3단계 배포
 
-- GitHub Releases 기반 자동 업데이트 (`tauri-plugin-updater`)
+- ~~GitHub Releases 기반 자동 업데이트 (`tauri-plugin-updater`)~~ ✅ 적용함 (2026-10-06, `scripts/release.ps1`)
 - 코드 서명 (SmartScreen "알 수 없는 게시자" 경고 줄이기)
 - 설치 안내 페이지 (복원 프로그램 PC 설치 순서를 그림과 함께)
 

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Download, FolderOpen, Info, Upload } from "lucide-react";
+import { getVersion } from "@tauri-apps/api/app";
 import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -37,6 +38,12 @@ interface Props {
 
 export function SettingsTab({ settings, status, onChange }: Props) {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    getVersion()
+      .then(setVersion)
+      .catch(() => setVersion(null));
+  }, []);
   const [shownDir, setShownDir] = useState<string | null>(null);
   const dataDir = shownDir ?? status.dataDir;
   useEffect(() => setShownDir(null), [status.dataDir]);
@@ -162,6 +169,12 @@ export function SettingsTab({ settings, status, onChange }: Props) {
           {message.text}
         </p>
       )}
+      <p className="mt-6 text-xs text-muted-foreground">
+        G-routine {version ? `v${version}` : ""} ·{" "}
+        {status.portable
+          ? "포터블 버전은 자동으로 업데이트되지 않아요. 릴리스 페이지에서 새 zip을 받아 주세요."
+          : "새 버전이 나오면 자동으로 설치되고 다시 켜져요."}
+      </p>
     </div>
   );
 }

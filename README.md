@@ -4,18 +4,27 @@
 
 ## 설치
 
+[릴리스 페이지](https://github.com/limhs06082-eng/g-routine/releases/latest)에서 내려받으세요.
+
 | 방식 | 파일 | 특징 |
 |---|---|---|
-| 설치형 | `G-routine_0.1.0_x64-setup.exe` | 관리자 권한 없이 설치. 처음 실행할 때 데이터 저장 폴더를 고릅니다 |
-| 포터블 | `G-routine_0.1.0_portable.zip` | 압축을 풀어 바로 실행. 데이터는 같은 폴더의 `data\`에 저장됩니다 |
+| 설치형 | `G-routine_<버전>_x64-setup.exe` | 관리자 권한 없이 설치. 새 버전이 나오면 **자동으로 업데이트**됩니다 |
+| 포터블 | `G-routine_<버전>_portable.zip` | 압축을 풀어 바로 실행. 데이터는 같은 폴더의 `data\`에 저장됩니다. 자동 업데이트는 되지 않습니다 |
 
 포터블 버전은 `G-routine.exe` 옆에 `data` 폴더가 있어야 포터블 모드로 동작합니다. 두 개를 함께 옮기세요.
+
+### 자동 업데이트
+설치형은 켜진 뒤 20초 후, 그리고 6시간마다 새 버전을 확인합니다. 새 버전이 있으면 내려받아 서명을 확인한 뒤 설치하고 다시 켜집니다. 잠깐 설치 진행 창이 보일 수 있습니다. 루틴과 기록은 그대로 유지됩니다.
+
+포터블 버전은 릴리스 페이지에서 새 zip을 받아 `G-routine.exe`만 바꿔 넣으세요(`data` 폴더는 그대로 둡니다).
 
 ### 복원 프로그램이 있는 학교 PC
 재부팅하면 C드라이브가 초기화되는 PC라면 다음 순서를 따르세요.
 1. 복원 프로그램을 **해제한 상태**에서 설치형으로 설치하고 한 번 실행합니다 (자동 시작 등록이 유지됩니다).
 2. 저장 위치는 **D드라이브**(기본값 `D:\G-routine\data`)로 둡니다.
 3. 복원을 다시 켜도 루틴과 체크 기록은 D드라이브에 남습니다. 혹시 설정이 지워져도 G-routine이 `D:\G-routine\data`를 자동으로 다시 찾습니다.
+
+자동 업데이트도 C드라이브에 설치되므로, 복원이 켜진 상태에서는 재부팅하면 예전 버전으로 돌아갔다가 켜질 때 다시 업데이트됩니다. 새 버전을 고정하려면 복원 해제 상태에서 한 번 켜 두세요.
 
 또는 포터블 zip을 D드라이브에 풀어서 쓰면 루틴과 기록 데이터가 C드라이브에 저장되지 않습니다. (화면 캐시와 자동 시작 등록은 C드라이브를 쓰므로, 자동 시작은 복원 해제 상태에서 켜야 유지됩니다.)
 
@@ -34,10 +43,26 @@ npm install
 npm run tauri dev      # 개발 실행
 npm test               # 화면 테스트 (Vitest)
 cd src-tauri && cargo test   # 규칙 · 저장 테스트
-npm run tauri build    # 설치 파일 빌드
-powershell -ExecutionPolicy Bypass -File scripts/package-portable.ps1   # 포터블 zip
 ```
 
 브라우저에서 `npm run dev` 후 `http://localhost:1420/`(위젯), `?window=manager`(관리 창), `?setup=1`(첫 실행)로 가짜 데이터 화면을 볼 수 있습니다.
+
+## 배포 (새 버전 내보내기)
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts/release.ps1 -Version 0.1.1 -Notes "바뀐 점"
+```
+
+이 명령 하나로 다음을 모두 처리합니다.
+1. 버전 번호 반영 (package.json, tauri.conf.json, Cargo.toml)
+2. 서명 빌드 (설치 파일과 `.sig`)
+3. 포터블 zip, `latest.json` 생성
+4. 커밋 · 태그 · push
+5. GitHub 릴리스 등록
+
+릴리스가 올라가면 설치형을 쓰는 PC는 다음 확인 때 자동으로 업데이트됩니다.
+
+- **서명 키** `C:\Users\<사용자>\.tauri\g-routine.key`는 저장소에 없고 이 PC에만 있습니다. **반드시 따로 백업하세요.** 잃어버리면 이미 설치된 앱에 더 이상 업데이트를 보낼 수 없습니다.
+- 설치 파일만 직접 빌드할 때도 서명 키가 필요합니다. 환경 변수 `TAURI_SIGNING_PRIVATE_KEY`(키 내용)와 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`(빈 값)를 설정하고 `npm run tauri build`를 실행하세요.
 
 설계 문서: `docs/superpowers/specs/2026-10-05-g-routine-design.md`
