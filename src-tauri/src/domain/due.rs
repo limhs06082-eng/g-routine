@@ -12,7 +12,7 @@ pub fn due_moment(day: NaiveDate, due: NaiveTime, day_start_hour: u32) -> NaiveD
 }
 
 /// 아직 끝내지 않았고 마감 시각이 지난 항목
-pub fn overdue<'a>(items: &'a [DayItem], day: NaiveDate, now: NaiveDateTime, day_start_hour: u32) -> Vec<&'a DayItem> {
+pub fn overdue(items: &[DayItem], day: NaiveDate, now: NaiveDateTime, day_start_hour: u32) -> Vec<&DayItem> {
     items
         .iter()
         .filter(|i| i.completed_at.is_none())

@@ -3,13 +3,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, type Settings } from "@/lib/api";
 
-function monthDay(day: string): string {
-  const [, m, d] = day.split("-").map(Number);
-  return `${m}월 ${d}일`;
+function monthDay(day: string, withYear: boolean): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return withYear ? `${y}년 ${m}월 ${d}일` : `${m}월 ${d}일`;
 }
 
 export function vacationLabel(start: string, end: string): string {
-  return `${monthDay(start)} ~ ${monthDay(end)} 동안 반복 루틴을 쉬어요`;
+  // 겨울방학처럼 해를 넘기면 연도까지 적는다
+  const withYear = start.slice(0, 4) !== end.slice(0, 4);
+  return `${monthDay(start, withYear)} ~ ${monthDay(end, withYear)} 동안 반복 루틴을 쉬어요`;
 }
 
 interface Props {

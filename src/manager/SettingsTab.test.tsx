@@ -19,6 +19,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 }));
 
 import { SettingsTab } from "./SettingsTab";
+import { vacationLabel } from "./VacationSetting";
 
 const settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, vacationStart: null, vacationEnd: null };
 const status: AppStatus = {
@@ -127,7 +128,11 @@ test("an active vacation can be cleared", async () => {
   apiMock.setVacation.mockResolvedValue(settings);
   const onVacation = { ...settings, vacationStart: "2026-12-24", vacationEnd: "2027-02-28" };
   render(<SettingsTab settings={onVacation} status={status} onChange={vi.fn()} />);
-  expect(screen.getByText("12월 24일 ~ 2월 28일 동안 반복 루틴을 쉬어요")).toBeInTheDocument();
+  expect(screen.getByText("2026년 12월 24일 ~ 2027년 2월 28일 동안 반복 루틴을 쉬어요")).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "방학 해제" }));
   expect(apiMock.setVacation).toHaveBeenCalledWith(null, null);
+});
+
+test("a vacation within one year is shown without the year", () => {
+  expect(vacationLabel("2027-07-20", "2027-08-23")).toBe("7월 20일 ~ 8월 23일 동안 반복 루틴을 쉬어요");
 });

@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use chrono::NaiveDate;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
-use crate::domain::day::fmt_day;
+use crate::domain::day::{fmt_day, parse_day};
 use crate::domain::rules::scheduled;
 use crate::db::routines;
 use crate::error::{AppError, AppResult};
@@ -30,15 +30,47 @@ fn item_from_row(r: &Row) -> rusqlite::Result<DayItem> {
     })
 }
 
+const SYNCED_DAY_KEY: &str = "synced_day";
+
+/// 지금까지 맞춘 가장 늦은 업무일 (기록 키가 없으면 남아 있는 기록 중 가장 늦은 날)
+fn last_synced_day(c: &Connection) -> AppResult<Option<NaiveDate>> {
+    let mark: Option<String> = c
+        .query_row("SELECT value FROM settings WHERE key = ?1", [SYNCED_DAY_KEY], |r| r.get(0))
+        .optional()?;
+    let latest: Option<String> = c.query_row("SELECT MAX(day) FROM day_items", [], |r| r.get(0))?;
+    Ok(mark.max(latest).as_deref().and_then(parse_day))
+}
+
+/// 이미 넘어간 '어제' 기록인가: 가장 늦게 맞춘 날의 바로 전날이고 기록이 남아 있는 날.
+/// 하루 시작 시각을 늦추면 '오늘'이 하루 전으로 돌아갈 수 있는데(최대 23시간), 그 기록은 그대로 둔다.
+/// 그보다 더 이전으로 돌아간 경우는 PC 시계를 고친 것으로 보고 평소처럼 맞춘다 (목록이 멈추지 않게).
+fn is_closed_day(c: &Connection, day: NaiveDate) -> AppResult<bool> {
+    let Some(last) = last_synced_day(c)? else { return Ok(false) };
+    if day.succ_opt() != Some(last) {
+        return Ok(false);
+    }
+    let rows: i64 = c.query_row("SELECT COUNT(*) FROM day_items WHERE day = ?1", [fmt_day(day)], |r| r.get(0))?;
+    Ok(rows > 0)
+}
+
 /// 그 업무일의 할 일 스냅샷을 루틴 규칙에 맞춘다. 오늘 업무일에만 호출할 것.
 /// - 새로 해당되는 루틴은 추가
 /// - 더 이상 해당하지 않는 '미완료' 항목은 제거 (완료 항목은 보존)
 /// - 미완료 항목의 이름과 모든 항목의 순서를 루틴과 맞춤
+///
+/// 이미 넘어간 어제 기록은 건드리지 않는다 (`is_closed_day`).
 pub fn sync_day(c: &Connection, day: NaiveDate, rest_day: bool) -> AppResult<()> {
+    if is_closed_day(c, day)? {
+        return Ok(());
+    }
+    let d = fmt_day(day);
     let all = routines::list_unarchived(c)?;
     let sched = scheduled(&all, day, rest_day);
-    let d = fmt_day(day);
     let tx = c.unchecked_transaction()?;
+    tx.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![SYNCED_DAY_KEY, d],
+    )?;
     for r in &sched {
         tx.execute(
             "INSERT OR IGNORE INTO day_items (day, routine_id, title_snapshot, sort_order) VALUES (?1, ?2, ?3, ?4)",

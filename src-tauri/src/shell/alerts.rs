@@ -45,10 +45,12 @@ pub fn spawn_due_alerts(app: AppHandle) {
         loop {
             std::thread::sleep(INTERVAL);
             let state = app.state::<AppState>();
+            // 한 번 읽은 시각으로 날짜와 마감 여부를 함께 판단한다 (자정 경계에서 어긋나지 않게)
+            let at = now();
             let checked = state.with_conn(|c| {
                 let s = settings::load(c)?;
-                let day = crate::domain::day::fmt_day(service::today(c, now())?);
-                Ok((s.due_alerts, day, service::overdue_items(c, now())?))
+                let day = crate::domain::day::fmt_day(service::today(c, at)?);
+                Ok((s.due_alerts, day, service::overdue_items(c, at)?))
             });
             let Ok((alerts_on, day, overdue)) = checked else { continue };
             let fresh = tracker.take_new(&day, overdue);

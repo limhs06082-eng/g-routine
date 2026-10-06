@@ -14,11 +14,18 @@ const STYLES: Record<ChipKind, string> = {
 export function Chip({ kind, children, label, className }: { kind: ChipKind; children: ReactNode; label?: string; className?: string }) {
   return (
     <span
-      aria-label={label}
       title={label}
       className={cn("inline-flex shrink-0 items-center rounded-full px-2 py-px text-[11px] leading-4", STYLES[kind], className)}
     >
-      {children}
+      {label ? (
+        <>
+          {/* 화면 낭독기는 짧은 표시 대신 설명 문구를 읽는다 */}
+          <span aria-hidden="true">{children}</span>
+          <span className="sr-only">{label}</span>
+        </>
+      ) : (
+        children
+      )}
     </span>
   );
 }

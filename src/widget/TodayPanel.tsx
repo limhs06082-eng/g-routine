@@ -15,8 +15,15 @@ import { formatDayLabel, localTimestamp, markDone, markPending, progress } from 
 const LEAVE_MS = 220;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** 받침이 있으면 "이에요", 없으면 "예요" (괄호 등은 건너뛰고 마지막 한글로 판단) */
+function iyeyo(word: string): string {
+  const last = [...word].reverse().find((ch) => ch >= "가" && ch <= "힣");
+  if (!last) return "이에요";
+  return (last.charCodeAt(0) - 0xac00) % 28 === 0 ? "예요" : "이에요";
+}
+
 function restMessage(rest: Rest): string {
-  if (rest.kind === "holiday") return `오늘은 ${rest.name}이에요. 푹 쉬세요`;
+  if (rest.kind === "holiday") return `오늘은 ${rest.name}${iyeyo(rest.name)}. 푹 쉬세요`;
   if (rest.kind === "vacation") return "방학 중이에요. 푹 쉬세요";
   return "좋은 주말 보내세요";
 }

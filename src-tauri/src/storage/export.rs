@@ -6,7 +6,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::db::{routines, settings};
-use crate::domain::day::parse_day;
+use crate::domain::day::{fmt_day, parse_day};
 use crate::error::{AppError, AppResult};
 use crate::model::Routine;
 
@@ -57,7 +57,7 @@ pub fn export(c: &Connection, now: &str) -> AppResult<BackupFile> {
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
-    let mut st = c.prepare("SELECT key, value FROM settings WHERE key NOT LIKE 'window_%' ORDER BY key")?;
+    let mut st = c.prepare("SELECT key, value FROM settings WHERE key NOT LIKE 'window_%' AND key <> 'synced_day' ORDER BY key")?;
     let settings = st
         .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
         .collect::<Result<Vec<_>, _>>()?;
@@ -110,6 +110,14 @@ pub fn import(c: &Connection, b: &BackupFile) -> AppResult<()> {
         }
         // Use settings::apply for validation and upserting; silently skip invalid pairs
         let _ = settings::apply(&tx, k, v);
+    }
+    // 방학 기간은 두 날짜가 모두 올바르고 순서가 맞을 때만 함께 되살린다
+    let find = |key: &str| b.settings.iter().find(|(k, _)| k == key).and_then(|(_, v)| parse_day(v));
+    if let (Some(start), Some(end)) = (find("vacation_start"), find("vacation_end")) {
+        if start <= end {
+            settings::set(&tx, "vacation_start", &fmt_day(start))?;
+            settings::set(&tx, "vacation_end", &fmt_day(end))?;
+        }
     }
     tx.commit()?;
     Ok(())
@@ -192,8 +200,10 @@ mod tests {
         service::set_done(&src, v.pending[0].id, true, at("2026-10-12 09:10")).unwrap();
         settings::apply(&src, "theme", "mint").unwrap();
         settings::set_window_pos(&src, 10, 10).unwrap();
+        settings::set_vacation(&src, Some(("2026-12-24", "2027-02-28"))).unwrap();
         let backup = export(&src, "2026-10-12T10:00:00").unwrap();
-        assert_eq!(backup.settings, vec![("theme".to_string(), "mint".to_string())]);
+        let keys: Vec<&str> = backup.settings.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, vec!["theme", "vacation_end", "vacation_start"]);
 
         let t = tempfile::tempdir().unwrap();
         let path = t.path().join("b.json");
@@ -206,7 +216,19 @@ mod tests {
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].title, "출결 확인");
         assert_eq!(history[0].completed_at.as_deref(), Some("2026-10-12T09:10:00"));
-        assert_eq!(settings::load(&dst).unwrap().theme, "mint");
+        let s = settings::load(&dst).unwrap();
+        assert_eq!(s.theme, "mint");
+        assert_eq!((s.vacation_start.as_deref(), s.vacation_end.as_deref()), (Some("2026-12-24"), Some("2027-02-28")));
+    }
+
+    #[test]
+    fn import_skips_a_vacation_in_the_wrong_order() {
+        let src = open_in_memory().unwrap();
+        settings::set_vacation(&src, Some(("2027-02-28", "2026-12-24"))).unwrap();
+        let dst = open_in_memory().unwrap();
+        import(&dst, &export(&src, "2026-10-12T10:00:00").unwrap()).unwrap();
+        let s = settings::load(&dst).unwrap();
+        assert_eq!((s.vacation_start, s.vacation_end), (None, None));
     }
 
     #[test]

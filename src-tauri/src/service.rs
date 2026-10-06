@@ -316,12 +316,13 @@ mod tests {
         assert_eq!(v.rest.as_ref().map(|r| r.kind), Some(RestKind::Vacation));
         assert!(v.pending.is_empty());
 
-        // 방학이 끝난 다음 날에는 다시 보인다
-        assert_eq!(titles(&get_today(&c, at("2026-10-15 09:00")).unwrap().pending), vec!["출결 확인"]);
-
         let s = set_vacation(&c, None, None, at(TUE)).unwrap();
         assert_eq!((s.vacation_start, s.vacation_end), (None, None));
         assert_eq!(titles(&get_today(&c, at(TUE)).unwrap().pending), vec!["출결 확인"]);
+
+        // 방학이 끝난 다음 날에는 다시 보인다
+        set_vacation(&c, Some("2026-10-13"), Some("2026-10-14"), at(TUE)).unwrap();
+        assert_eq!(titles(&get_today(&c, at("2026-10-15 09:00")).unwrap().pending), vec!["출결 확인"]);
     }
 
     #[test]
@@ -441,5 +442,57 @@ mod tests {
         get_today(&c, at(MON)).unwrap();
         let titles: Vec<String> = overdue_items(&c, at("2026-10-12 10:00")).unwrap().into_iter().map(|i| i.title).collect();
         assert_eq!(titles, vec!["출결 확인".to_string()]);
+    }
+
+    #[test]
+    fn moving_the_day_start_later_never_rewrites_an_earlier_day() {
+        let c = open_in_memory().unwrap();
+        let a = create_routine(&c, input_daily("출결 확인"), at(MON)).unwrap();
+        create_routine(&c, input_daily("공문 확인"), at(MON)).unwrap();
+        get_today(&c, at(MON)).unwrap(); // 월요일 기록: 두 항목 모두 미완료
+        get_today(&c, at(TUE)).unwrap(); // 화요일로 넘어감
+
+        // 화요일 오전 9시에 하루 시작 시각을 오후 3시로 바꾸면 업무일 계산상 오늘이 월요일이 된다
+        archive_routine(&c, a, at(TUE)).unwrap();
+        set_setting(&c, "day_start_hour", "15", at(TUE)).unwrap();
+        let v = get_today(&c, at(TUE)).unwrap();
+        assert_eq!(v.day, "2026-10-12");
+        // 월요일 기록은 그대로 남아야 한다 (보관한 루틴의 미완료 항목도 지워지지 않음)
+        assert_eq!(titles(&history_day(&c, "2026-10-12").unwrap()), vec!["출결 확인", "공문 확인"]);
+    }
+
+    #[test]
+    fn yesterday_stays_closed_even_when_today_had_nothing_to_do() {
+        let c = open_in_memory().unwrap();
+        let a = create_routine(&c, input_daily("출결 확인"), at("2026-10-08 09:00")).unwrap();
+        create_routine(&c, input_daily("공문 확인"), at("2026-10-08 09:00")).unwrap();
+        get_today(&c, at("2026-10-08 09:00")).unwrap();
+        assert!(get_today(&c, at(HANGUL_DAY)).unwrap().pending.is_empty()); // 공휴일: 기록 없음
+
+        archive_routine(&c, a, at(HANGUL_DAY)).unwrap();
+        set_setting(&c, "day_start_hour", "15", at(HANGUL_DAY)).unwrap();
+        assert_eq!(titles(&history_day(&c, "2026-10-08").unwrap()), vec!["출결 확인", "공문 확인"]);
+    }
+
+    #[test]
+    fn a_pc_clock_set_back_by_days_still_fills_today() {
+        let c = open_in_memory().unwrap();
+        create_routine(&c, input_daily("출결 확인"), at(MON)).unwrap();
+        get_today(&c, at("2026-10-20 09:00")).unwrap(); // 시계가 앞서 있던 때
+        assert_eq!(titles(&get_today(&c, at(TUE)).unwrap().pending), vec!["출결 확인"]);
+    }
+
+    #[test]
+    fn vacation_starting_today_keeps_what_was_already_done() {
+        let c = open_in_memory().unwrap();
+        create_routine(&c, input_daily("출결 확인"), at(TUE)).unwrap();
+        create_routine(&c, input_daily("공문 확인"), at(TUE)).unwrap();
+        let v = get_today(&c, at(TUE)).unwrap();
+        set_done(&c, v.pending[0].id, true, at(TUE)).unwrap();
+
+        set_vacation(&c, Some("2026-10-13"), Some("2026-10-20"), at(TUE)).unwrap();
+        let v = get_today(&c, at(TUE)).unwrap();
+        assert_eq!(titles(&v.done), vec!["출결 확인"]);
+        assert!(v.pending.is_empty());
     }
 }

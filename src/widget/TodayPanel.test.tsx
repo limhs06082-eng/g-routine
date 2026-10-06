@@ -153,7 +153,7 @@ test("an item past its due time shows a red due chip", async () => {
     pending: [item(1, "출결 확인", { dueTime: "09:00", overdue: true }), item(2, "공문 확인", { dueTime: "15:00" })],
   });
   renderPanel();
-  const late = await screen.findByLabelText("마감 09:00 지남");
+  const late = (await screen.findByText("마감 09:00 지남")).parentElement as HTMLElement;
   expect(late).toHaveTextContent("09:00");
   expect(late.className).toMatch(/text-danger/);
   expect(screen.getByText("15:00").className).not.toMatch(/text-danger/);
@@ -161,6 +161,8 @@ test("an item past its due time shows a red due chip", async () => {
 
 test.each([
   [{ kind: "holiday", name: "한글날" }, "오늘은 한글날이에요. 푹 쉬세요"],
+  [{ kind: "holiday", name: "추석 연휴" }, "오늘은 추석 연휴예요. 푹 쉬세요"],
+  [{ kind: "holiday", name: "대체공휴일(개천절)" }, "오늘은 대체공휴일(개천절)이에요. 푹 쉬세요"],
   [{ kind: "vacation", name: "방학" }, "방학 중이에요. 푹 쉬세요"],
   [{ kind: "weekend", name: "주말" }, "좋은 주말 보내세요"],
 ] as const)("a rest day with nothing to do says why (%o)", async (rest, message) => {
