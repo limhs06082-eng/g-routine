@@ -5,6 +5,7 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Webview
 
 use crate::db::settings;
 use crate::service;
+use crate::shell::memory::set_low_memory;
 use crate::shell::position::{compute_position, fit_height, Rect};
 use crate::state::AppState;
 use crate::{now, startup, DATA_CHANGED};
@@ -23,6 +24,7 @@ pub fn show_widget(app: &AppHandle) {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
+        set_low_memory(&w, false);
     }
 }
 
@@ -31,12 +33,15 @@ pub fn show_widget_quietly(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(WIDGET) {
         let _ = w.show();
         let _ = w.unminimize();
+        set_low_memory(&w, false);
     }
 }
 
+/// 숨기면 트레이에만 남으므로 WebView2를 메모리 절약 모드로 바꾼다.
 pub fn hide_widget(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(WIDGET) {
         let _ = w.hide();
+        set_low_memory(&w, true);
     }
 }
 
@@ -130,7 +135,7 @@ pub fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
     match event {
         WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
-            let _ = window.hide();
+            hide_widget(window.app_handle());
         }
         WindowEvent::Moved(pos) => {
             let h = window.outer_size().map(|s| s.height as i32).unwrap_or(0);

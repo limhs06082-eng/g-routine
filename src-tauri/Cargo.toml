@@ -30,6 +30,9 @@ chrono = { version = "0.4", features = ["serde"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.45", features = ["Win32_Storage_FileSystem"] }
+# 위젯을 숨겼을 때 WebView2 메모리 절약 모드(Tauri가 쓰는 버전과 맞춤)
+webview2-com = "0.39"
+windows-core = "0.62"
 
 [dev-dependencies]
 tempfile = "3"

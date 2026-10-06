@@ -1,3 +1,4 @@
+pub mod memory;
 pub mod position;
 pub mod tray;
 pub mod window;
