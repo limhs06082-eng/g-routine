@@ -30,6 +30,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let location_file = app.path().app_config_dir()?.join("location.json");
             let exe_dir = std::env::current_exe()?
@@ -41,6 +42,7 @@ pub fn run() {
             app.manage(state);
             shell::startup(app.handle())?;
             shell::update::spawn_update_checker(app.handle().clone());
+            shell::alerts::spawn_due_alerts(app.handle().clone());
             Ok(())
         })
         .on_window_event(shell::window::on_window_event)

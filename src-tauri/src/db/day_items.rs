@@ -26,6 +26,7 @@ fn item_from_row(r: &Row) -> rusqlite::Result<DayItem> {
         repeat_type: RepeatType::parse(&repeat).unwrap_or(RepeatType::Daily),
         due_time: r.get(7)?,
         has_link: link.map(|l| !l.is_empty()).unwrap_or(false),
+        overdue: false,
     })
 }
 

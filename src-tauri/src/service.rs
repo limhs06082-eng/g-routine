@@ -2,6 +2,7 @@ use chrono::{NaiveDate, NaiveDateTime};
 use rusqlite::Connection;
 
 use crate::domain::day::{business_day, fmt_day, fmt_ts, is_weekend, parse_day};
+use crate::domain::due;
 use crate::db::{day_items, routines, settings};
 use crate::error::{AppError, AppResult};
 use crate::model::{DayItem, DaySummary, RepeatType, Routine, RoutineInput, Settings, TodayView};
@@ -20,10 +21,25 @@ pub fn get_today(c: &Connection, now: NaiveDateTime) -> AppResult<TodayView> {
     let s = settings::load(c)?;
     let day = business_day(now, s.day_start_hour);
     day_items::sync_day(c, day, s.hide_weekends)?;
-    let (done, pending): (Vec<DayItem>, Vec<DayItem>) = day_items::items_for_day(c, &fmt_day(day))?
+    let (done, mut pending): (Vec<DayItem>, Vec<DayItem>) = day_items::items_for_day(c, &fmt_day(day))?
         .into_iter()
         .partition(|i| i.completed_at.is_some());
+    let late: Vec<i64> = due::overdue(&pending, day, now, s.day_start_hour).iter().map(|i| i.id).collect();
+    for item in &mut pending {
+        item.overdue = late.contains(&item.id);
+    }
     Ok(TodayView { day: fmt_day(day), weekend_hidden: s.hide_weekends && is_weekend(day), pending, done })
+}
+
+/// 오늘 업무일에서 끝내지 않았고 마감 시각이 지난 항목 (알림용, DB를 바꾸지 않는다)
+pub fn overdue_items(c: &Connection, now: NaiveDateTime) -> AppResult<Vec<DayItem>> {
+    let s = settings::load(c)?;
+    let day = business_day(now, s.day_start_hour);
+    let items = day_items::items_for_day(c, &fmt_day(day))?;
+    Ok(due::overdue(&items, day, now, s.day_start_hour)
+        .into_iter()
+        .map(|i| DayItem { overdue: true, ..i.clone() })
+        .collect())
 }
 
 pub fn set_done(c: &Connection, item_id: i64, done: bool, now: NaiveDateTime) -> AppResult<()> {
@@ -318,5 +334,34 @@ mod tests {
         let err = set_done(&c, 9999, true, at(MON));
         assert!(err.is_err());
         assert!(err.unwrap_err().to_string().contains("항목을 찾을 수 없어요"));
+    }
+
+    #[test]
+    fn today_marks_pending_items_past_their_due_time() {
+        let c = open_in_memory().unwrap();
+        let due = RoutineInput { due_time: Some("09:00".into()), ..input_daily("출결 확인") };
+        create_routine(&c, due, at(MON)).unwrap();
+        create_routine(&c, input_daily("수업 준비"), at(MON)).unwrap();
+
+        let before = get_today(&c, at("2026-10-05 08:59")).unwrap();
+        assert!(before.pending.iter().all(|i| !i.overdue));
+
+        let after = get_today(&c, at("2026-10-05 09:00")).unwrap();
+        let flags: Vec<(&str, bool)> = after.pending.iter().map(|i| (i.title.as_str(), i.overdue)).collect();
+        assert_eq!(flags, vec![("출결 확인", true), ("수업 준비", false)]);
+
+        set_done(&c, after.pending[0].id, true, at("2026-10-05 09:05")).unwrap();
+        let done = get_today(&c, at("2026-10-05 09:10")).unwrap();
+        assert!(done.done.iter().all(|i| !i.overdue));
+    }
+
+    #[test]
+    fn overdue_alerts_list_only_pending_past_due_items_of_today() {
+        let c = open_in_memory().unwrap();
+        create_routine(&c, RoutineInput { due_time: Some("09:00".into()), ..input_daily("출결 확인") }, at(MON)).unwrap();
+        create_routine(&c, RoutineInput { due_time: Some("15:00".into()), ..input_daily("공문 확인") }, at(MON)).unwrap();
+        get_today(&c, at(MON)).unwrap();
+        let titles: Vec<String> = overdue_items(&c, at("2026-10-05 10:00")).unwrap().into_iter().map(|i| i.title).collect();
+        assert_eq!(titles, vec!["출결 확인".to_string()]);
     }
 }

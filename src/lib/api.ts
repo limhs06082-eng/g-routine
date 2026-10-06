@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type RepeatType = "daily" | "weekdays" | "once";
 export type ThemeName = "lavender" | "mint" | "peach" | "sky" | "lemon";
-export type SettingKey = "always_on_top" | "autostart" | "hide_weekends" | "day_start_hour" | "theme";
+export type SettingKey = "always_on_top" | "autostart" | "hide_weekends" | "day_start_hour" | "theme" | "due_alerts";
 export type TemplateName = "homeroom" | "subject" | "empty";
 
 export interface Routine {
@@ -37,6 +37,8 @@ export interface DayItem {
   repeatType: RepeatType;
   dueTime: string | null;
   hasLink: boolean;
+  /** 오늘 목록에서만: 끝내지 않았는데 마감 시각이 지났는지 */
+  overdue: boolean;
 }
 
 export interface TodayView {
@@ -58,6 +60,7 @@ export interface Settings {
   hideWeekends: boolean;
   dayStartHour: number;
   theme: ThemeName;
+  dueAlerts: boolean;
 }
 
 export interface AppStatus {

@@ -107,6 +107,9 @@ export function SettingsTab({ settings, status, onChange }: Props) {
       <Row label="주말에는 숨기기" hint="토 · 일에는 반복 루틴을 띄우지 않아요">
         <Switch aria-label="주말에는 숨기기" checked={settings.hideWeekends} onCheckedChange={toggle("hide_weekends")} />
       </Row>
+      <Row label="마감 시각 알림" hint="마감 시각이 지나도 끝내지 않은 할 일을 Windows 알림으로 한 번 알려 줘요">
+        <Switch aria-label="마감 시각 알림" checked={settings.dueAlerts} onCheckedChange={toggle("due_alerts")} />
+      </Row>
       <Row label="하루 시작 시각" hint="이 시각 전에 체크하면 전날 기록으로 남아요">
         <select
           aria-label="하루 시작 시각"

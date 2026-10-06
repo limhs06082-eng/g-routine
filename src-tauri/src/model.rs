@@ -65,6 +65,9 @@ pub struct DayItem {
     pub repeat_type: RepeatType,
     pub due_time: Option<String>,
     pub has_link: bool,
+    /// 오늘 목록에서만 채운다: 끝내지 않았는데 마감 시각이 지났는지
+    #[serde(default)]
+    pub overdue: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -92,4 +95,6 @@ pub struct Settings {
     pub hide_weekends: bool,
     pub day_start_hour: u32,
     pub theme: String,
+    /// 마감 시각이 지난 할 일을 Windows 알림으로 알려 줄지
+    pub due_alerts: bool,
 }

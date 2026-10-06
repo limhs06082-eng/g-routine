@@ -30,6 +30,7 @@ const item = (id: number, title: string, extra: Partial<DayItem> = {}): DayItem 
   repeatType: "daily",
   dueTime: null,
   hasLink: false,
+  overdue: false,
   ...extra,
 });
 
@@ -144,4 +145,16 @@ test("long lists render every item without an inner scroll area", async () => {
   const list = screen.getByTestId("pending-list");
   expect(list.className).not.toMatch(/overflow|max-h/);
   expect(list.querySelectorAll("li")).toHaveLength(15);
+});
+
+test("an item past its due time shows a red due chip", async () => {
+  apiMock.today.mockResolvedValue({
+    ...view,
+    pending: [item(1, "출결 확인", { dueTime: "09:00", overdue: true }), item(2, "공문 확인", { dueTime: "15:00" })],
+  });
+  renderPanel();
+  const late = await screen.findByLabelText("마감 09:00 지남");
+  expect(late).toHaveTextContent("09:00");
+  expect(late.className).toMatch(/text-danger/);
+  expect(screen.getByText("15:00").className).not.toMatch(/text-danger/);
 });

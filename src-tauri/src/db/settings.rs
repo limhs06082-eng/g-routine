@@ -4,7 +4,7 @@ use crate::error::{AppError, AppResult};
 use crate::model::Settings;
 
 pub const THEMES: [&str; 5] = ["lavender", "mint", "peach", "sky", "lemon"];
-const BOOL_KEYS: [&str; 3] = ["always_on_top", "autostart", "hide_weekends"];
+const BOOL_KEYS: [&str; 4] = ["always_on_top", "autostart", "hide_weekends", "due_alerts"];
 
 pub fn get(c: &Connection, key: &str) -> AppResult<Option<String>> {
     Ok(c.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0)).optional()?)
@@ -33,6 +33,7 @@ pub fn load(c: &Connection) -> AppResult<Settings> {
         always_on_top: get_bool(c, "always_on_top", true)?,
         autostart: get_bool(c, "autostart", true)?,
         hide_weekends: get_bool(c, "hide_weekends", true)?,
+        due_alerts: get_bool(c, "due_alerts", true)?,
         day_start_hour: get(c, "day_start_hour")?
             .and_then(|v| v.parse::<u32>().ok())
             .filter(|h| *h < 24)
@@ -103,7 +104,14 @@ mod tests {
         let s = load(&c).unwrap();
         assert_eq!(
             s,
-            Settings { always_on_top: true, autostart: true, hide_weekends: true, day_start_hour: 4, theme: "lavender".into() }
+            Settings {
+                always_on_top: true,
+                autostart: true,
+                hide_weekends: true,
+                day_start_hour: 4,
+                theme: "lavender".into(),
+                due_alerts: true,
+            }
         );
     }
 
@@ -113,8 +121,10 @@ mod tests {
         apply(&c, "hide_weekends", "false").unwrap();
         apply(&c, "day_start_hour", "5").unwrap();
         apply(&c, "theme", "mint").unwrap();
+        apply(&c, "due_alerts", "false").unwrap();
         let s = load(&c).unwrap();
         assert_eq!((s.hide_weekends, s.day_start_hour, s.theme.as_str()), (false, 5, "mint"));
+        assert!(!s.due_alerts);
 
         assert!(apply(&c, "hide_weekends", "yes").is_err());
         assert!(apply(&c, "day_start_hour", "24").is_err());

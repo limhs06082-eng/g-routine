@@ -11,6 +11,7 @@ const item = (id: number, title: string, extra: Partial<DayItem> = {}): DayItem 
   repeatType: "daily",
   dueTime: null,
   hasLink: false,
+  overdue: false,
   ...extra,
 });
 

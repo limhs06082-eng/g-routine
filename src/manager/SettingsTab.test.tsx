@@ -19,7 +19,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 
 import { SettingsTab } from "./SettingsTab";
 
-const settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender" };
+const settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true };
 const status: AppStatus = {
   ready: true,
   corrupt: false,
@@ -85,4 +85,13 @@ test("day start hour offers every hour and keeps an afternoon value selected", (
   expect(select.options[23]).toHaveTextContent("오후 11시");
   expect(select.value).toBe("15");
   expect(select.selectedOptions[0]).toHaveTextContent("오후 3시");
+});
+
+test("the due alert switch turns alerts off", async () => {
+  const onChange = vi.fn().mockResolvedValue(settings);
+  render(<SettingsTab settings={settings} status={status} onChange={onChange} />);
+  const toggle = screen.getByRole("switch", { name: "마감 시각 알림" });
+  expect(toggle).toBeChecked();
+  await userEvent.click(toggle);
+  expect(onChange).toHaveBeenCalledWith("due_alerts", "false");
 });

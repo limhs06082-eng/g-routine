@@ -31,7 +31,14 @@ export function TaskRow({ item, leaving, onCheck, onOpenLink }: Props) {
       </button>
       <span className="min-w-0 flex-1 truncate text-[13px]">{item.title}</span>
       {item.repeatType === "once" && <Chip kind="once">오늘만</Chip>}
-      {item.dueTime && <Chip kind="due">{item.dueTime}</Chip>}
+      {item.dueTime &&
+        (item.overdue ? (
+          <Chip kind="overdue" label={`마감 ${item.dueTime} 지남`}>
+            {item.dueTime}
+          </Chip>
+        ) : (
+          <Chip kind="due">{item.dueTime}</Chip>
+        ))}
       {item.hasLink && (
         <button
           type="button"

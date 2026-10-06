@@ -35,7 +35,7 @@ const routines: Routine[] = [
   routine(7, "가정통신문 회수", { repeatType: "once", onceDate: TODAY }),
 ];
 const doneAt = new Map<number, string>([[2, `${TODAY}T08:55:00`]]);
-let settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender" };
+let settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true };
 let ready = new URLSearchParams(window.location.search).get("setup") !== "1";
 const DATA_DIR = "D:\\G-routine\\data";
 
@@ -63,6 +63,7 @@ function toItem(r: Routine, day: string, completedAt: string | null): DayItem {
     repeatType: r.repeatType,
     dueTime: r.dueTime,
     hasLink: Boolean(r.link),
+    overdue: false,
   };
 }
 
@@ -128,6 +129,7 @@ const KEY_MAP: Record<string, keyof Settings> = {
   hide_weekends: "hideWeekends",
   day_start_hour: "dayStartHour",
   theme: "theme",
+  due_alerts: "dueAlerts",
 };
 
 export function installMockBackend() {
