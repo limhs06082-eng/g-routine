@@ -27,6 +27,7 @@ const item = (id: number, title: string, completedAt: string | null): DayItem =>
   dueTime: null,
   hasLink: false,
   overdue: false,
+  slot: null,
 });
 
 const items = [item(1, "출결 확인", "2026-10-05T09:12:00"), item(2, "가정통신문 회수", null)];

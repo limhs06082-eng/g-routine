@@ -3,9 +3,9 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use crate::domain::day::{fmt_day, parse_day};
 use crate::error::{AppError, AppResult};
-use crate::model::{RepeatType, Routine, RoutineInput};
+use crate::model::{RepeatType, Routine, RoutineInput, Slot};
 
-const COLS: &str = "id, title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, archived_at";
+const COLS: &str = "id, title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, archived_at, slot";
 const TITLE_MAX: usize = 40;
 
 fn from_row(r: &Row) -> rusqlite::Result<Routine> {
@@ -22,6 +22,7 @@ fn from_row(r: &Row) -> rusqlite::Result<Routine> {
         sort_order: r.get(7)?,
         created_at: r.get(8)?,
         archived_at: r.get(9)?,
+        slot: r.get::<_, Option<String>>(10)?.as_deref().and_then(Slot::parse),
     })
 }
 
@@ -53,8 +54,8 @@ pub fn get(c: &Connection, id: i64) -> AppResult<Routine> {
 pub fn insert(c: &Connection, input: &RoutineInput, now: &str) -> AppResult<i64> {
     let next: i64 = c.query_row("SELECT COALESCE(MAX(sort_order), -1) + 1 FROM routines", [], |r| r.get(0))?;
     c.execute(
-        "INSERT INTO routines (title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        "INSERT INTO routines (title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, slot)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             input.title,
             input.repeat_type.as_str(),
@@ -63,7 +64,8 @@ pub fn insert(c: &Connection, input: &RoutineInput, now: &str) -> AppResult<i64>
             input.due_time,
             input.link,
             next,
-            now
+            now,
+            input.slot.map(|s| s.as_str())
         ],
     )?;
     Ok(c.last_insert_rowid())
@@ -71,7 +73,7 @@ pub fn insert(c: &Connection, input: &RoutineInput, now: &str) -> AppResult<i64>
 
 pub fn update(c: &Connection, id: i64, input: &RoutineInput) -> AppResult<()> {
     let n = c.execute(
-        "UPDATE routines SET title = ?2, repeat_type = ?3, weekdays = ?4, once_date = ?5, due_time = ?6, link = ?7
+        "UPDATE routines SET title = ?2, repeat_type = ?3, weekdays = ?4, once_date = ?5, due_time = ?6, link = ?7, slot = ?8
          WHERE id = ?1 AND archived_at IS NULL",
         params![
             id,
@@ -80,7 +82,8 @@ pub fn update(c: &Connection, id: i64, input: &RoutineInput) -> AppResult<()> {
             i64::from(input.weekdays),
             input.once_date,
             input.due_time,
-            input.link
+            input.link,
+            input.slot.map(|s| s.as_str())
         ],
     )?;
     if n == 0 {
@@ -168,7 +171,7 @@ pub fn validate(input: RoutineInput) -> AppResult<RoutineInput> {
             (0, Some(fmt_day(d)))
         }
     };
-    Ok(RoutineInput { title, repeat_type: input.repeat_type, weekdays, once_date, due_time, link })
+    Ok(RoutineInput { title, repeat_type: input.repeat_type, weekdays, once_date, due_time, link, slot: input.slot })
 }
 
 #[cfg(test)]

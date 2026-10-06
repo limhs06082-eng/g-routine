@@ -7,10 +7,11 @@ use crate::domain::day::{fmt_day, parse_day};
 use crate::domain::rules::scheduled;
 use crate::db::routines;
 use crate::error::{AppError, AppResult};
-use crate::model::{DayItem, DaySummary, RepeatType};
+use crate::domain::rest::RestKind;
+use crate::model::{DayItem, DaySummary, RepeatType, Slot};
 
 const ITEM_SELECT: &str = "SELECT d.id, d.day, d.routine_id, d.title_snapshot, d.sort_order, d.completed_at,
-        r.repeat_type, r.due_time, r.link
+        r.repeat_type, r.due_time, r.link, r.slot
    FROM day_items d JOIN routines r ON r.id = d.routine_id";
 
 fn item_from_row(r: &Row) -> rusqlite::Result<DayItem> {
@@ -27,6 +28,7 @@ fn item_from_row(r: &Row) -> rusqlite::Result<DayItem> {
         due_time: r.get(7)?,
         has_link: link.map(|l| !l.is_empty()).unwrap_or(false),
         overdue: false,
+        slot: r.get::<_, Option<String>>(9)?.as_deref().and_then(Slot::parse),
     })
 }
 
@@ -60,13 +62,13 @@ pub fn effective_day(c: &Connection, day: NaiveDate) -> AppResult<NaiveDate> {
 /// - 새로 해당되는 루틴은 추가
 /// - 더 이상 해당하지 않는 미완료 항목은 제거 (완료 항목은 보존)
 /// - 미완료 항목의 이름과 모든 항목의 순서를 루틴과 맞춤
-pub fn sync_day(c: &Connection, day: NaiveDate, rest_day: bool) -> AppResult<()> {
+pub fn sync_day(c: &Connection, day: NaiveDate, rest: Option<RestKind>) -> AppResult<()> {
     if effective_day(c, day)? != day {
         return Ok(()); // 이미 넘어간 어제 기록은 건드리지 않는다
     }
     let d = fmt_day(day);
     let all = routines::list_unarchived(c)?;
-    let sched = scheduled(&all, day, rest_day);
+    let sched = scheduled(&all, day, rest);
     let tx = c.unchecked_transaction()?;
     tx.execute(
         "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",

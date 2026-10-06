@@ -7,6 +7,8 @@ use crate::domain::rest::{rest_day, RestRules};
 use crate::db::{day_items, routines, settings};
 use crate::error::{AppError, AppResult};
 use crate::model::{DayItem, DaySummary, RepeatType, Routine, RoutineInput, Settings, TodayView};
+#[cfg(test)]
+use crate::model::Slot;
 
 /// 지금의 업무일 (하루 시작 시각을 늦춰도 어제로 돌아가지 않는다: `day_items::effective_day`)
 fn current_day(c: &Connection, s: &Settings, now: NaiveDateTime) -> AppResult<NaiveDate> {
@@ -29,14 +31,14 @@ fn rest_rules(s: &Settings) -> RestRules {
 pub fn resync_today(c: &Connection, now: NaiveDateTime) -> AppResult<()> {
     let s = settings::load(c)?;
     let day = current_day(c, &s, now)?;
-    day_items::sync_day(c, day, rest_day(day, &rest_rules(&s)).is_some())
+    day_items::sync_day(c, day, rest_day(day, &rest_rules(&s)).map(|r| r.kind))
 }
 
 pub fn get_today(c: &Connection, now: NaiveDateTime) -> AppResult<TodayView> {
     let s = settings::load(c)?;
     let day = current_day(c, &s, now)?;
     let rest = rest_day(day, &rest_rules(&s));
-    day_items::sync_day(c, day, rest.is_some())?;
+    day_items::sync_day(c, day, rest.as_ref().map(|r| r.kind))?;
     let (done, mut pending): (Vec<DayItem>, Vec<DayItem>) = day_items::items_for_day(c, &fmt_day(day))?
         .into_iter()
         .partition(|i| i.completed_at.is_some());
@@ -96,6 +98,7 @@ pub fn quick_add(c: &Connection, title: &str, now: NaiveDateTime) -> AppResult<(
         once_date: Some(fmt_day(day)),
         due_time: None,
         link: None,
+        slot: None,
     };
     create_routine(c, input, now).map(|_| ())
 }
@@ -527,5 +530,27 @@ mod tests {
         let v = get_today(&c, at(TUE)).unwrap();
         assert_eq!(titles(&v.done), vec!["출결 확인"]);
         assert!(v.pending.is_empty());
+    }
+
+    #[test]
+    fn slot_is_saved_and_shown_on_today_items() {
+        let c = open_in_memory().unwrap();
+        let id = create_routine(&c, RoutineInput { slot: Some(Slot::Morning), ..input_daily("출결 확인") }, at(MON)).unwrap();
+        assert_eq!(get_today(&c, at(MON)).unwrap().pending[0].slot, Some(Slot::Morning));
+
+        update_routine(&c, id, RoutineInput { slot: Some(Slot::After), ..input_daily("출결 확인") }, at(MON)).unwrap();
+        assert_eq!(get_today(&c, at(MON)).unwrap().pending[0].slot, Some(Slot::After));
+        update_routine(&c, id, input_daily("출결 확인"), at(MON)).unwrap();
+        assert_eq!(get_today(&c, at(MON)).unwrap().pending[0].slot, None);
+    }
+
+    #[test]
+    fn a_saturday_routine_shows_on_saturday_even_with_weekends_hidden() {
+        let c = open_in_memory().unwrap();
+        create_routine(&c, input_daily("출결 확인"), at(FRI)).unwrap();
+        create_routine(&c, input_weekdays("토요 방과후 지도", 32), at(FRI)).unwrap();
+        let v = get_today(&c, at(SAT)).unwrap();
+        assert_eq!(v.rest.map(|r| r.kind), Some(RestKind::Weekend));
+        assert_eq!(titles(&v.pending), vec!["토요 방과후 지도"]);
     }
 }

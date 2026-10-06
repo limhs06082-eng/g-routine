@@ -18,6 +18,7 @@ function routine(id: number, title: string, extra: Partial<Routine> = {}): Routi
     onceDate: null,
     dueTime: null,
     link: null,
+    slot: null,
     sortOrder: id,
     createdAt: `${TODAY}T08:00:00`,
     archivedAt: null,
@@ -26,12 +27,12 @@ function routine(id: number, title: string, extra: Partial<Routine> = {}): Routi
 }
 
 const routines: Routine[] = [
-  routine(1, "출결 확인", { dueTime: "09:00", link: "https://www.neis.go.kr" }),
-  routine(2, "수업 준비"),
-  routine(3, "누가기록 작성", { link: "https://www.neis.go.kr" }),
-  routine(4, "공문 확인", { link: "https://www.google.com" }),
-  routine(5, "알림장 작성"),
-  routine(6, "주간학습안내 배부", { repeatType: "weekdays", weekdays: 16 }),
+  routine(1, "출결 확인", { dueTime: "09:00", link: "https://www.neis.go.kr", slot: "morning" }),
+  routine(2, "수업 준비", { slot: "morning" }),
+  routine(3, "누가기록 작성", { link: "https://www.neis.go.kr", slot: "after" }),
+  routine(4, "공문 확인", { link: "https://www.google.com", slot: "after" }),
+  routine(5, "알림장 작성", { slot: "after" }),
+  routine(6, "주간학습안내 배부", { repeatType: "weekdays", weekdays: 16, slot: "after" }),
   routine(7, "가정통신문 회수", { repeatType: "once", onceDate: TODAY }),
 ];
 const doneAt = new Map<number, string>([[2, `${TODAY}T08:55:00`]]);
@@ -64,6 +65,7 @@ function toItem(r: Routine, day: string, completedAt: string | null): DayItem {
     dueTime: r.dueTime,
     hasLink: Boolean(r.link),
     overdue: false,
+    slot: r.slot,
   };
 }
 

@@ -6,7 +6,7 @@ import { api, errorMessage } from "@/lib/api";
 import { useData } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { RoutineForm } from "./RoutineForm";
-import { moveItem, repeatLabel } from "./routines";
+import { moveItem, repeatLabel, SLOT_NAMES } from "./routines";
 
 export function RoutinesTab() {
   const { data, error, reload, setData } = useData(api.listRoutines);
@@ -88,6 +88,7 @@ export function RoutinesTab() {
                 >
                   <GripVertical className="size-4 shrink-0 cursor-grab text-muted-foreground" aria-hidden />
                   <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                  {r.slot && <span className="shrink-0 text-xs text-muted-foreground">{SLOT_NAMES[r.slot]}</span>}
                   <Chip kind={r.repeatType}>{repeatLabel(r)}</Chip>
                   {r.dueTime && <Chip kind="due">{r.dueTime}</Chip>}
                   {r.link && <LinkIcon className="size-3.5 shrink-0 text-primary" aria-label="바로가기 있음" />}

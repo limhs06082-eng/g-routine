@@ -29,6 +29,37 @@ impl RepeatType {
     }
 }
 
+/// 하루 중 언제 하는 일인지 (위젯에서 묶어 보여 준다). 없으면 '언제든'.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Slot {
+    /// 조회 전
+    Morning,
+    /// 수업 중
+    Class,
+    /// 방과 후
+    After,
+}
+
+impl Slot {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Slot::Morning => "morning",
+            Slot::Class => "class",
+            Slot::After => "after",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "morning" => Some(Slot::Morning),
+            "class" => Some(Slot::Class),
+            "after" => Some(Slot::After),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Routine {
@@ -39,6 +70,9 @@ pub struct Routine {
     pub once_date: Option<String>,
     pub due_time: Option<String>,
     pub link: Option<String>,
+    /// 예전 백업 파일에는 없다
+    #[serde(default)]
+    pub slot: Option<Slot>,
     pub sort_order: i64,
     pub created_at: String,
     pub archived_at: Option<String>,
@@ -53,6 +87,8 @@ pub struct RoutineInput {
     pub once_date: Option<String>,
     pub due_time: Option<String>,
     pub link: Option<String>,
+    #[serde(default)]
+    pub slot: Option<Slot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -67,6 +103,8 @@ pub struct DayItem {
     pub repeat_type: RepeatType,
     pub due_time: Option<String>,
     pub has_link: bool,
+    #[serde(default)]
+    pub slot: Option<Slot>,
     /// 오늘 목록에서만 채운다: 끝내지 않았는데 마감 시각이 지났는지
     #[serde(default)]
     pub overdue: bool,

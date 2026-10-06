@@ -1,6 +1,7 @@
 use chrono::NaiveDate;
 
 use crate::domain::day::{parse_day, weekday_bit};
+use crate::domain::rest::RestKind;
 use crate::model::{RepeatType, Routine};
 
 pub fn applies(r: &Routine, day: NaiveDate) -> bool {
@@ -14,13 +15,24 @@ pub fn applies(r: &Routine, day: NaiveDate) -> bool {
     }
 }
 
+/// 쉬는 날에도 보이는 루틴인가.
+/// - 공휴일 · 방학: 그 날짜로 직접 적은 하루만 할 일(once)만 보인다.
+/// - 주말: 하루만 할 일과, 토 · 일을 직접 고른 요일 루틴은 보인다 ('매일' 루틴만 쉰다).
+fn shows_on_rest_day(r: &Routine, rest: RestKind) -> bool {
+    match r.repeat_type {
+        RepeatType::Once => true,
+        RepeatType::Weekdays => rest == RestKind::Weekend,
+        RepeatType::Daily => false,
+    }
+}
+
 /// 그날 해야 할 루틴 (정렬: sort_order, id).
-/// 쉬는 날(공휴일·방학·주말, domain::rest가 정한다)에는 반복 루틴(daily/weekdays)을 빼고 once만 남긴다.
-pub fn scheduled(routines: &[Routine], day: NaiveDate, rest_day: bool) -> Vec<&Routine> {
+/// rest는 쉬는 날의 이유 (domain::rest가 정한다). 쉬는 날에는 `shows_on_rest_day`인 루틴만 남긴다.
+pub fn scheduled(routines: &[Routine], day: NaiveDate, rest: Option<RestKind>) -> Vec<&Routine> {
     let mut list: Vec<&Routine> = routines
         .iter()
         .filter(|r| applies(r, day))
-        .filter(|r| !(rest_day && r.repeat_type != RepeatType::Once))
+        .filter(|r| rest.is_none_or(|kind| shows_on_rest_day(r, kind)))
         .collect();
     list.sort_by_key(|r| (r.sort_order, r.id));
     list
@@ -62,13 +74,27 @@ mod tests {
         let once = routine(3, "주말 할 일", RepeatType::Once, 0, Some("2026-10-10"));
         let all = vec![a, b, once];
 
-        let weekday: Vec<&str> = scheduled(&all, date("2026-10-05"), false).iter().map(|r| r.title.as_str()).collect();
+        let weekday: Vec<&str> = scheduled(&all, date("2026-10-05"), None).iter().map(|r| r.title.as_str()).collect();
         assert_eq!(weekday, vec!["B", "A"]);
 
-        let saturday: Vec<&str> = scheduled(&all, date("2026-10-10"), true).iter().map(|r| r.title.as_str()).collect();
+        let saturday: Vec<&str> = scheduled(&all, date("2026-10-10"), Some(RestKind::Weekend)).iter().map(|r| r.title.as_str()).collect();
         assert_eq!(saturday, vec!["주말 할 일"]);
 
-        let saturday_shown: Vec<&str> = scheduled(&all, date("2026-10-10"), false).iter().map(|r| r.title.as_str()).collect();
+        let saturday_shown: Vec<&str> = scheduled(&all, date("2026-10-10"), None).iter().map(|r| r.title.as_str()).collect();
         assert_eq!(saturday_shown, vec!["B", "주말 할 일", "A"]);
+    }
+
+    #[test]
+    fn weekend_days_picked_on_purpose_show_even_when_weekends_are_hidden() {
+        let daily = routine(1, "출결 확인", RepeatType::Daily, 0, None);
+        let saturday_club = routine(2, "토요 방과후 지도", RepeatType::Weekdays, 32, None);
+        let friday = routine(3, "주간학습안내 배부", RepeatType::Weekdays, 16, None);
+        let all = vec![daily, saturday_club, friday];
+        let titles = |rest| scheduled(&all, date("2026-10-10"), rest).iter().map(|r| r.title.as_str()).collect::<Vec<_>>();
+
+        assert_eq!(titles(Some(RestKind::Weekend)), vec!["토요 방과후 지도"]);
+        // 공휴일 · 방학에는 요일 루틴도 쉰다
+        assert!(titles(Some(RestKind::Holiday)).is_empty());
+        assert!(titles(Some(RestKind::Vacation)).is_empty());
     }
 }

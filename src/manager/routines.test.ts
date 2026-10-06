@@ -11,7 +11,7 @@ import {
   weekdayLabel,
 } from "./routines";
 
-const base: RoutineInput = { title: "출결 확인", repeatType: "daily", weekdays: 0, onceDate: null, dueTime: null, link: null };
+const base: RoutineInput = { title: "출결 확인", repeatType: "daily", weekdays: 0, onceDate: null, dueTime: null, link: null, slot: null };
 
 test("weekday and repeat labels", () => {
   expect(weekdayLabel(5)).toBe("월·수");
@@ -55,5 +55,5 @@ test("normalize trims and clears fields that do not apply", () => {
     dueTime: null,
   });
   expect(normalize({ ...base, repeatType: "once", onceDate: null }).onceDate).toBe(todayString());
-  expect(emptyInput()).toEqual({ title: "", repeatType: "daily", weekdays: 0, onceDate: null, dueTime: null, link: null });
+  expect(emptyInput()).toEqual({ title: "", repeatType: "daily", weekdays: 0, onceDate: null, dueTime: null, link: null, slot: null });
 });

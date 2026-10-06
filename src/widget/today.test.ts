@@ -1,5 +1,5 @@
 import type { DayItem, TodayView } from "@/lib/api";
-import { formatDayLabel, formatTime, localTimestamp, markDone, markPending, progress } from "./today";
+import { formatDayLabel, formatTime, groupBySlot, localTimestamp, markDone, markPending, progress } from "./today";
 
 const item = (id: number, title: string, extra: Partial<DayItem> = {}): DayItem => ({
   id,
@@ -12,6 +12,7 @@ const item = (id: number, title: string, extra: Partial<DayItem> = {}): DayItem 
   dueTime: null,
   hasLink: false,
   overdue: false,
+  slot: null,
   ...extra,
 });
 
@@ -42,4 +43,19 @@ test("time helpers", () => {
   expect(localTimestamp(new Date(2026, 9, 5, 8, 7, 3))).toBe("2026-10-05T08:07:03");
   expect(formatTime("2026-10-05T08:47:12")).toBe("08:47");
   expect(formatTime(null)).toBe("");
+});
+
+test("items are grouped by time slot only when some item has one", () => {
+  expect(groupBySlot([item(1, "A"), item(2, "B")])).toBeNull();
+  const groups = groupBySlot([
+    item(1, "알림장", { slot: "after" }),
+    item(2, "메모"),
+    item(3, "출결", { slot: "morning" }),
+    item(4, "공문", { slot: "after" }),
+  ]);
+  expect(groups?.map((g) => [g.slot, g.items.map((i) => i.title)])).toEqual([
+    ["morning", ["출결"]],
+    ["after", ["알림장", "공문"]],
+    [null, ["메모"]],
+  ]);
 });

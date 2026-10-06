@@ -43,6 +43,7 @@ mod tests {
             due_time: due.map(String::from),
             has_link: false,
             overdue: false,
+            slot: None,
         }
     }
 

@@ -31,6 +31,7 @@ const item = (id: number, title: string, extra: Partial<DayItem> = {}): DayItem 
   dueTime: null,
   hasLink: false,
   overdue: false,
+  slot: null,
   ...extra,
 });
 
@@ -194,4 +195,17 @@ test("the header can shrink the widget into mini mode", async () => {
   render(<TodayPanel pinned onTogglePin={noop} mini={false} onToggleMini={onToggleMini} />);
   await user.click(await screen.findByRole("button", { name: "작게 보기" }));
   expect(onToggleMini).toHaveBeenCalledTimes(1);
+});
+
+test("pending items are shown under time slot headings", async () => {
+  apiMock.today.mockResolvedValue({
+    ...view,
+    pending: [item(1, "출결 확인", { slot: "morning" }), item(2, "알림장 작성", { slot: "after" }), item(3, "메모")],
+  });
+  renderPanel();
+  const morning = await screen.findByRole("region", { name: "조회 전" });
+  expect(morning).toHaveTextContent("출결 확인");
+  expect(screen.getByRole("region", { name: "방과 후" })).toHaveTextContent("알림장 작성");
+  expect(screen.getByRole("region", { name: "언제든" })).toHaveTextContent("메모");
+  expect(screen.queryByRole("region", { name: "수업 중" })).not.toBeInTheDocument();
 });

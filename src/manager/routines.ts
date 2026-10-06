@@ -1,7 +1,9 @@
-import type { RepeatType, Routine, RoutineInput } from "@/lib/api";
+import type { RepeatType, Routine, RoutineInput, Slot } from "@/lib/api";
 
 export const WEEKDAY_NAMES = ["월", "화", "수", "목", "금", "토", "일"];
 export const REPEAT_NAMES: Record<RepeatType, string> = { daily: "매일", weekdays: "요일 지정", once: "하루만" };
+export const SLOTS: Slot[] = ["morning", "class", "after"];
+export const SLOT_NAMES: Record<Slot, string> = { morning: "조회 전", class: "수업 중", after: "방과 후" };
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -40,11 +42,11 @@ export function todayString(d: Date = new Date()): string {
 }
 
 export function emptyInput(): RoutineInput {
-  return { title: "", repeatType: "daily", weekdays: 0, onceDate: null, dueTime: null, link: null };
+  return { title: "", repeatType: "daily", weekdays: 0, onceDate: null, dueTime: null, link: null, slot: null };
 }
 
 export function toInput(r: Routine): RoutineInput {
-  return { title: r.title, repeatType: r.repeatType, weekdays: r.weekdays, onceDate: r.onceDate, dueTime: r.dueTime, link: r.link };
+  return { title: r.title, repeatType: r.repeatType, weekdays: r.weekdays, onceDate: r.onceDate, dueTime: r.dueTime, link: r.link, slot: r.slot };
 }
 
 /** 저장 전 정리: 공백 제거, 반복 종류에 맞지 않는 값 비우기 */
@@ -56,6 +58,7 @@ export function normalize(input: RoutineInput): RoutineInput {
     onceDate: input.repeatType === "once" ? (input.onceDate ?? todayString()) : null,
     dueTime: input.dueTime ? input.dueTime : null,
     link: input.link?.trim() ? input.link.trim() : null,
+    slot: input.slot,
   };
 }
 

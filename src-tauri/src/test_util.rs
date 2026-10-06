@@ -18,6 +18,7 @@ pub fn input_daily(title: &str) -> RoutineInput {
         once_date: None,
         due_time: None,
         link: None,
+        slot: None,
     }
 }
 
@@ -38,6 +39,7 @@ pub fn routine(id: i64, title: &str, repeat_type: RepeatType, weekdays: u8, once
         once_date: once_date.map(String::from),
         due_time: None,
         link: None,
+        slot: None,
         sort_order: id,
         created_at: "2026-10-01T09:00:00".into(),
         archived_at: None,

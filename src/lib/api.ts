@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export type RepeatType = "daily" | "weekdays" | "once";
+/** 하루 중 언제 하는 일인지: 조회 전 · 수업 중 · 방과 후 (없으면 언제든) */
+export type Slot = "morning" | "class" | "after";
 export type ThemeName = "lavender" | "mint" | "peach" | "sky" | "lemon";
 export type SettingKey = "always_on_top" | "autostart" | "hide_weekends" | "day_start_hour" | "theme" | "due_alerts" | "hide_holidays" | "mini_mode";
 export type TemplateName = "homeroom" | "subject" | "empty";
@@ -13,6 +15,7 @@ export interface Routine {
   onceDate: string | null;
   dueTime: string | null;
   link: string | null;
+  slot: Slot | null;
   sortOrder: number;
   createdAt: string;
   archivedAt: string | null;
@@ -25,6 +28,7 @@ export interface RoutineInput {
   onceDate: string | null;
   dueTime: string | null;
   link: string | null;
+  slot: Slot | null;
 }
 
 export interface DayItem {
@@ -37,6 +41,7 @@ export interface DayItem {
   repeatType: RepeatType;
   dueTime: string | null;
   hasLink: boolean;
+  slot: Slot | null;
   /** 오늘 목록에서만: 끝내지 않았는데 마감 시각이 지났는지 */
   overdue: boolean;
 }

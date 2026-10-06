@@ -38,6 +38,7 @@ test("submits normalized input and resets", async () => {
     onceDate: null,
     dueTime: null,
     link: "https://a.b",
+    slot: null,
   });
   expect(screen.getByLabelText("루틴 이름")).toHaveValue("");
 });
@@ -53,6 +54,7 @@ test("edit mode shows existing values and a save button", () => {
         onceDate: null,
         dueTime: "09:00",
         link: null,
+        slot: null,
         sortOrder: 0,
         createdAt: "",
         archivedAt: null,
@@ -74,4 +76,16 @@ test("pressing Enter twice while saving submits only once", async () => {
   await user.type(screen.getByLabelText("루틴 이름"), "급식 지도");
   await user.keyboard("{Enter}{Enter}");
   expect(onSubmit).toHaveBeenCalledTimes(1);
+});
+
+test("weekend days and a time slot can be chosen", async () => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined);
+  const user = userEvent.setup();
+  render(<RoutineForm onSubmit={onSubmit} />);
+  await user.type(screen.getByLabelText("루틴 이름"), "토요 방과후 지도");
+  await user.click(screen.getByRole("radio", { name: "요일 지정" }));
+  await user.click(screen.getByRole("button", { name: "토" }));
+  await user.click(screen.getByRole("radio", { name: "방과 후" }));
+  await user.click(screen.getByRole("button", { name: "추가" }));
+  expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ repeatType: "weekdays", weekdays: 32, slot: "after" }));
 });

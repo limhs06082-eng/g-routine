@@ -80,8 +80,8 @@ pub fn import(c: &Connection, b: &BackupFile) -> AppResult<()> {
     tx.execute("DELETE FROM settings WHERE key NOT LIKE 'window_%'", [])?;
     for r in &b.routines {
         tx.execute(
-            "INSERT INTO routines (id, title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, archived_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO routines (id, title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, archived_at, slot)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 r.id,
                 r.title,
@@ -92,7 +92,8 @@ pub fn import(c: &Connection, b: &BackupFile) -> AppResult<()> {
                 r.link,
                 r.sort_order,
                 r.created_at,
-                r.archived_at
+                r.archived_at,
+                r.slot.map(|s| s.as_str())
             ],
         )?;
     }
@@ -222,6 +223,23 @@ mod tests {
     }
 
     #[test]
+    fn slot_survives_export_and_import() {
+        let src = open_in_memory().unwrap();
+        let input = crate::model::RoutineInput { slot: Some(crate::model::Slot::Class), ..input_daily("진도 체크") };
+        service::create_routine(&src, input, at("2026-10-12 09:00")).unwrap();
+        let dst = open_in_memory().unwrap();
+        import(&dst, &export(&src, "2026-10-12T10:00:00").unwrap()).unwrap();
+        assert_eq!(routines::list_unarchived(&dst).unwrap()[0].slot, Some(crate::model::Slot::Class));
+    }
+
+    #[test]
+    fn a_backup_from_before_slots_still_loads() {
+        let json = r#"{"app":"g-routine","version":1,"exportedAt":"","routines":[{"id":1,"title":"출결 확인","repeatType":"daily","weekdays":0,"onceDate":null,"dueTime":null,"link":null,"sortOrder":0,"createdAt":"2026-10-01T09:00:00","archivedAt":null}],"dayItems":[],"settings":[]}"#;
+        let b: BackupFile = serde_json::from_str(json).unwrap();
+        assert_eq!(b.routines[0].slot, None);
+    }
+
+    #[test]
     fn import_skips_a_vacation_in_the_wrong_order() {
         let src = open_in_memory().unwrap();
         settings::set_vacation(&src, Some(("2027-02-28", "2026-12-24"))).unwrap();
@@ -286,6 +304,7 @@ mod tests {
                 once_date: None,
                 due_time: None,
                 link: None,
+                slot: None,
                 sort_order: 0,
                 created_at: "2026-10-12T00:00:00".into(),
                 archived_at: None,

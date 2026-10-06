@@ -27,6 +27,7 @@ const routine = (id: number, title: string): Routine => ({
   onceDate: null,
   dueTime: null,
   link: null,
+  slot: null,
   sortOrder: id,
   createdAt: "",
   archivedAt: null,

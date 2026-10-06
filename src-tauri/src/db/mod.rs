@@ -40,6 +40,11 @@ CREATE TABLE settings (
 );
 ";
 
+/// v2: 루틴의 시간대(조회 전 · 수업 중 · 방과 후). 예전 버전 앱도 이 열을 모르는 채로 그대로 읽고 쓸 수 있다.
+const SCHEMA_V2: &str = "
+ALTER TABLE routines ADD COLUMN slot TEXT CHECK (slot IN ('morning','class','after'));
+";
+
 pub fn open(path: &Path) -> AppResult<Connection> {
     let conn = Connection::open(path)?;
     prepare(&conn)?;
@@ -67,6 +72,12 @@ fn migrate(conn: &Connection) -> AppResult<()> {
         tx.pragma_update(None, "user_version", 1)?;
         tx.commit()?;
     }
+    if version < 2 {
+        let tx = conn.unchecked_transaction()?;
+        tx.execute_batch(SCHEMA_V2)?;
+        tx.pragma_update(None, "user_version", 2)?;
+        tx.commit()?;
+    }
     Ok(())
 }
 
@@ -85,7 +96,7 @@ mod tests {
         let conn = open_in_memory().unwrap();
         migrate(&conn).unwrap(); // 두 번째 호출은 아무것도 하지 않아야 한다
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
         let tables: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('routines','day_items','settings')",
@@ -98,6 +109,26 @@ mod tests {
     }
 
     #[test]
+    fn upgrading_a_v1_database_keeps_routines_and_adds_slot() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA_V1).unwrap();
+        conn.pragma_update(None, "user_version", 1).unwrap();
+        conn.execute(
+            "INSERT INTO routines (title, repeat_type, sort_order, created_at) VALUES ('출결 확인', 'daily', 0, '2026-10-01T09:00:00')",
+            [],
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(version, 2);
+        let list = routines::list_unarchived(&conn).unwrap();
+        assert_eq!((list[0].title.as_str(), list[0].slot), ("출결 확인", None));
+        // 정해진 값 말고는 넣을 수 없다
+        assert!(conn.execute("UPDATE routines SET slot = 'lunch'", []).is_err());
+    }
+
+    #[test]
     fn file_backed_migration_survives_reopen() {
         let dir = tempdir().unwrap();
         let db_path = dir.path().join("test.db");
@@ -106,7 +137,7 @@ mod tests {
         {
             let conn = open(&db_path).unwrap();
             let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-            assert_eq!(version, 1);
+            assert_eq!(version, 2);
             assert!(integrity_ok(&conn).unwrap());
         }
 
@@ -114,7 +145,7 @@ mod tests {
         {
             let conn = open(&db_path).unwrap();
             let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-            assert_eq!(version, 1);
+            assert_eq!(version, 2);
             let tables: i64 = conn
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('routines','day_items','settings')",

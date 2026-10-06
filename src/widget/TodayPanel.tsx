@@ -11,7 +11,7 @@ import { QuickAdd } from "./QuickAdd";
 import { TaskRow } from "./TaskRow";
 import { UndoToast } from "./UndoToast";
 import { WidgetHeader } from "./WidgetHeader";
-import { formatDayLabel, localTimestamp, markDone, markPending, progress } from "./today";
+import { formatDayLabel, groupBySlot, localTimestamp, markDone, markPending, progress, SLOT_TITLES } from "./today";
 
 const LEAVE_MS = 220;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -87,6 +87,16 @@ export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini }: Props) {
   if (mini) return <MiniPill view={view} onExpand={() => void onToggleMini().catch(() => {})} />;
   const { done, total, percent } = progress(view);
   const allDone = total > 0 && done === total;
+  const groups = groupBySlot(view.pending);
+  const row = (item: DayItem) => (
+    <TaskRow
+      key={item.id}
+      item={item}
+      leaving={leaving.includes(item.id)}
+      onCheck={() => void check(item)}
+      onOpenLink={() => void openLink(item)}
+    />
+  );
 
   async function check(item: DayItem) {
     if (leaving.includes(item.id)) return;
@@ -154,17 +164,20 @@ export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini }: Props) {
         </div>
       </div>
       {view.pending.length > 0 ? (
-        <ul data-testid="pending-list" className="px-1">
-          {view.pending.map((item) => (
-            <TaskRow
-              key={item.id}
-              item={item}
-              leaving={leaving.includes(item.id)}
-              onCheck={() => void check(item)}
-              onOpenLink={() => void openLink(item)}
-            />
-          ))}
-        </ul>
+        groups ? (
+          <div data-testid="pending-list" className="px-1">
+            {groups.map((g) => (
+              <section key={g.slot ?? "none"} aria-label={SLOT_TITLES[g.slot ?? "none"]}>
+                <div className="px-2.5 pt-1.5 pb-0.5 text-[11px] font-medium text-muted-foreground">{SLOT_TITLES[g.slot ?? "none"]}</div>
+                <ul>{g.items.map(row)}</ul>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <ul data-testid="pending-list" className="px-1">
+            {view.pending.map(row)}
+          </ul>
+        )
       ) : (
         <EmptyState view={view} total={total} />
       )}
