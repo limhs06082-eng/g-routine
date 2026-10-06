@@ -1,6 +1,7 @@
 pub mod alerts;
 pub mod memory;
 pub mod position;
+pub mod shortcut;
 pub mod tray;
 pub mod update;
 pub mod window;

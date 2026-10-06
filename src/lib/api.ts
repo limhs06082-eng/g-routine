@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type RepeatType = "daily" | "weekdays" | "once";
 export type ThemeName = "lavender" | "mint" | "peach" | "sky" | "lemon";
-export type SettingKey = "always_on_top" | "autostart" | "hide_weekends" | "day_start_hour" | "theme" | "due_alerts" | "hide_holidays";
+export type SettingKey = "always_on_top" | "autostart" | "hide_weekends" | "day_start_hour" | "theme" | "due_alerts" | "hide_holidays" | "mini_mode";
 export type TemplateName = "homeroom" | "subject" | "empty";
 
 export interface Routine {
@@ -69,6 +69,8 @@ export interface Settings {
   theme: ThemeName;
   dueAlerts: boolean;
   hideHolidays: boolean;
+  /** 위젯을 알약 모양(✓ 3/7)으로 작게 보여 줄지 */
+  miniMode: boolean;
   /** 방학 · 쉬는 기간 (YYYY-MM-DD, 둘 다 있거나 둘 다 없다) */
   vacationStart: string | null;
   vacationEnd: string | null;
@@ -83,6 +85,8 @@ export interface AppStatus {
   previousDir: string | null;
   suggestedDir: string;
   dataDir: string | null;
+  /** 전역 단축키(Ctrl+Alt+G)를 등록했는지. 다른 프로그램이 쓰고 있으면 false */
+  shortcut: boolean;
 }
 
 export interface DataDirInfo {

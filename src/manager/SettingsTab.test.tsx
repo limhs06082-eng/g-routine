@@ -21,7 +21,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 import { SettingsTab } from "./SettingsTab";
 import { vacationLabel } from "./VacationSetting";
 
-const settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, vacationStart: null, vacationEnd: null };
+const settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, miniMode: false, vacationStart: null, vacationEnd: null };
 const status: AppStatus = {
   ready: true,
   corrupt: false,
@@ -30,6 +30,7 @@ const status: AppStatus = {
   previousDir: null,
   suggestedDir: "D:\\G-routine\\data",
   dataDir: "D:\\G-routine\\data",
+  shortcut: true,
 };
 
 function renderTab() {
@@ -135,4 +136,17 @@ test("an active vacation can be cleared", async () => {
 
 test("a vacation within one year is shown without the year", () => {
   expect(vacationLabel("2027-07-20", "2027-08-23")).toBe("7월 20일 ~ 8월 23일 동안 반복 루틴을 쉬어요");
+});
+
+test("the shortcut row explains when Ctrl+Alt+G is taken by another program", () => {
+  render(<SettingsTab settings={settings} status={{ ...status, shortcut: false }} onChange={vi.fn()} />);
+  expect(screen.getByText(/다른 프로그램이 이 단축키를 쓰고 있어서 쓸 수 없어요/)).toBeInTheDocument();
+});
+
+test("mini mode can be switched on from settings", async () => {
+  const user = userEvent.setup();
+  const onChange = vi.fn().mockResolvedValue({ ...settings, miniMode: true });
+  render(<SettingsTab settings={settings} status={status} onChange={onChange} />);
+  await user.click(screen.getByRole("switch", { name: "작게 보기" }));
+  expect(onChange).toHaveBeenCalledWith("mini_mode", "true");
 });

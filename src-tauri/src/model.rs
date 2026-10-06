@@ -102,6 +102,8 @@ pub struct Settings {
     pub due_alerts: bool,
     /// 공휴일(대체공휴일 포함)에는 반복 루틴을 숨길지
     pub hide_holidays: bool,
+    /// 위젯을 알약 모양(✓ 3/7)으로 작게 보여 줄지
+    pub mini_mode: bool,
     /// 방학 · 쉬는 기간 (YYYY-MM-DD, 둘 다 있거나 둘 다 없다)
     pub vacation_start: Option<String>,
     pub vacation_end: Option<String>,

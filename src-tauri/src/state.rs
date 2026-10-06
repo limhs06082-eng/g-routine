@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -19,6 +19,8 @@ pub struct AppStatus {
     pub previous_dir: Option<String>,
     pub suggested_dir: String,
     pub data_dir: Option<String>,
+    /// 전역 단축키(Ctrl+Alt+G)를 등록했는지. 다른 프로그램이 쓰고 있으면 false.
+    pub shortcut: bool,
 }
 
 pub struct AppState {
@@ -29,6 +31,8 @@ pub struct AppState {
     pub exe_dir: PathBuf,
     pub move_seq: AtomicU64,
     pub programmatic_move: Mutex<Option<Instant>>,
+    /// 시작 과정(boot)이 상태를 통째로 다시 쓰므로 단축키 등록 결과는 따로 둔다
+    pub shortcut: AtomicBool,
 }
 
 impl AppState {
@@ -40,6 +44,7 @@ impl AppState {
             exe_dir,
             move_seq: AtomicU64::new(0),
             programmatic_move: Mutex::new(None),
+            shortcut: AtomicBool::new(false),
         }
     }
 
@@ -69,7 +74,9 @@ impl AppState {
     }
 
     pub fn status(&self) -> AppStatus {
-        self.status.lock().map(|s| s.clone()).unwrap_or_default()
+        let mut s = self.status.lock().map(|s| s.clone()).unwrap_or_default();
+        s.shortcut = self.shortcut.load(Ordering::Relaxed);
+        s
     }
 
     pub fn update_status(&self, f: impl FnOnce(&mut AppStatus)) {

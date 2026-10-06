@@ -5,6 +5,7 @@ import { api, errorMessage, type DayItem, type Rest, type TodayView } from "@/li
 import { useData } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { DoneRow } from "./DoneRow";
+import { MiniPill } from "./MiniPill";
 import { Notice } from "./Notice";
 import { QuickAdd } from "./QuickAdd";
 import { TaskRow } from "./TaskRow";
@@ -54,7 +55,15 @@ function EmptyState({ view, total }: { view: TodayView; total: number }) {
   );
 }
 
-export function TodayPanel({ pinned, onTogglePin }: { pinned: boolean; onTogglePin: () => Promise<unknown> }) {
+interface Props {
+  pinned: boolean;
+  onTogglePin: () => Promise<unknown>;
+  /** 미니 모드(알약 모양)로 보여 줄지 */
+  mini: boolean;
+  onToggleMini: () => Promise<unknown>;
+}
+
+export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini }: Props) {
   const { data, error, reload, setData } = useData(api.today);
   const [leaving, setLeaving] = useState<number[]>([]);
   const [undoItem, setUndoItem] = useState<DayItem | null>(null);
@@ -64,7 +73,7 @@ export function TodayPanel({ pinned, onTogglePin }: { pinned: boolean; onToggleP
   const closeNotice = useCallback(() => setNotice(null), []);
 
   if (!data) {
-    if (!error) return <div className="h-28" />;
+    if (!error) return <div className={mini ? "h-8" : "h-28"} />;
     return (
       <div className="flex flex-col items-center gap-2 px-4 py-6 text-center text-xs text-muted-foreground">
         <span>오늘 목록을 불러오지 못했어요.</span>
@@ -75,6 +84,7 @@ export function TodayPanel({ pinned, onTogglePin }: { pinned: boolean; onToggleP
     );
   }
   const view = data;
+  if (mini) return <MiniPill view={view} onExpand={() => void onToggleMini().catch(() => {})} />;
   const { done, total, percent } = progress(view);
   const allDone = total > 0 && done === total;
 
@@ -123,7 +133,12 @@ export function TodayPanel({ pinned, onTogglePin }: { pinned: boolean; onToggleP
 
   return (
     <div className="flex flex-col">
-      <WidgetHeader dayLabel={formatDayLabel(view.day)} pinned={pinned} onTogglePin={() => void onTogglePin().catch((e) => setNotice(errorMessage(e)))} />
+      <WidgetHeader
+        dayLabel={formatDayLabel(view.day)}
+        pinned={pinned}
+        onTogglePin={() => void onTogglePin().catch((e) => setNotice(errorMessage(e)))}
+        onShrink={() => void onToggleMini().catch((e) => setNotice(errorMessage(e)))}
+      />
       <div className="px-3.5 pb-2.5">
         <div className="mb-1 flex justify-between text-xs text-muted-foreground">
           <span>오늘의 루틴</span>

@@ -102,6 +102,21 @@ export function SettingsTab({ settings, status, onChange }: Props) {
       <Row label="항상 맨 위에 표시" hint="다른 창에 가려지지 않아요">
         <Switch aria-label="항상 맨 위에 표시" checked={settings.alwaysOnTop} onCheckedChange={toggle("always_on_top")} />
       </Row>
+      <Row label="작게 보기" hint="위젯을 알약 모양(✓ 3/7)으로 줄여요. 알약을 누르면 다시 커져요">
+        <Switch aria-label="작게 보기" checked={settings.miniMode} onCheckedChange={toggle("mini_mode")} />
+      </Row>
+      <Row
+        label="위젯 숨기기 단축키"
+        hint={
+          status.shortcut
+            ? "누르면 위젯을 숨기고, 한 번 더 누르면 다시 보여요. 수업 화면을 띄울 때 편해요"
+            : "다른 프로그램이 이 단축키를 쓰고 있어서 쓸 수 없어요. 위젯의 − 버튼이나 트레이 아이콘을 쓰세요"
+        }
+      >
+        <kbd className={cn("rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-xs", !status.shortcut && "line-through opacity-60")}>
+          Ctrl+Alt+G
+        </kbd>
+      </Row>
       <Row label="컴퓨터 켜면 자동 시작">
         <Switch aria-label="컴퓨터 켜면 자동 시작" checked={settings.autostart} onCheckedChange={toggle("autostart")} />
       </Row>

@@ -5,7 +5,7 @@ use crate::error::{AppError, AppResult};
 use crate::model::Settings;
 
 pub const THEMES: [&str; 5] = ["lavender", "mint", "peach", "sky", "lemon"];
-const BOOL_KEYS: [&str; 5] = ["always_on_top", "autostart", "hide_weekends", "due_alerts", "hide_holidays"];
+const BOOL_KEYS: [&str; 6] = ["always_on_top", "autostart", "hide_weekends", "due_alerts", "hide_holidays", "mini_mode"];
 
 pub fn get(c: &Connection, key: &str) -> AppResult<Option<String>> {
     Ok(c.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0)).optional()?)
@@ -36,6 +36,7 @@ pub fn load(c: &Connection) -> AppResult<Settings> {
         hide_weekends: get_bool(c, "hide_weekends", true)?,
         due_alerts: get_bool(c, "due_alerts", true)?,
         hide_holidays: get_bool(c, "hide_holidays", true)?,
+        mini_mode: get_bool(c, "mini_mode", false)?,
         vacation_start: get(c, "vacation_start")?.filter(|d| parse_day(d).is_some()),
         vacation_end: get(c, "vacation_end")?.filter(|d| parse_day(d).is_some()),
         day_start_hour: get(c, "day_start_hour")?
@@ -132,6 +133,7 @@ mod tests {
                 theme: "lavender".into(),
                 due_alerts: true,
                 hide_holidays: true,
+                mini_mode: false,
                 vacation_start: None,
                 vacation_end: None,
             }

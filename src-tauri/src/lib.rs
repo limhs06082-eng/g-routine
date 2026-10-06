@@ -31,6 +31,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let location_file = app.path().app_config_dir()?.join("location.json");
             let exe_dir = std::env::current_exe()?
@@ -43,6 +44,8 @@ pub fn run() {
             shell::startup(app.handle())?;
             shell::update::spawn_update_checker(app.handle().clone());
             shell::alerts::spawn_due_alerts(app.handle().clone());
+            let shortcut = shell::shortcut::register(app.handle());
+            app.state::<state::AppState>().shortcut.store(shortcut, std::sync::atomic::Ordering::Relaxed);
             Ok(())
         })
         .on_window_event(shell::window::on_window_event)

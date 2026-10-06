@@ -35,7 +35,7 @@ const routines: Routine[] = [
   routine(7, "가정통신문 회수", { repeatType: "once", onceDate: TODAY }),
 ];
 const doneAt = new Map<number, string>([[2, `${TODAY}T08:55:00`]]);
-let settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, vacationStart: null, vacationEnd: null };
+let settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, miniMode: false, vacationStart: null, vacationEnd: null };
 let ready = new URLSearchParams(window.location.search).get("setup") !== "1";
 const DATA_DIR = "D:\\G-routine\\data";
 
@@ -112,7 +112,7 @@ function historyDay(day: string): DayItem[] {
 }
 
 function status(): AppStatus {
-  return { ready, corrupt: false, openFailed: false, portable: false, previousDir: null, suggestedDir: DATA_DIR, dataDir: ready ? DATA_DIR : null };
+  return { ready, corrupt: false, openFailed: false, portable: false, previousDir: null, suggestedDir: DATA_DIR, dataDir: ready ? DATA_DIR : null, shortcut: true };
 }
 
 function changed() {
@@ -131,6 +131,7 @@ const KEY_MAP: Record<string, keyof Settings> = {
   theme: "theme",
   due_alerts: "dueAlerts",
   hide_holidays: "hideHolidays",
+  mini_mode: "miniMode",
 };
 
 export function installMockBackend() {

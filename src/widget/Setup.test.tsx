@@ -27,6 +27,7 @@ const base: AppStatus = {
   previousDir: null,
   suggestedDir: "D:\\G-routine\\data",
   dataDir: null,
+  shortcut: true,
 };
 
 beforeEach(() => {

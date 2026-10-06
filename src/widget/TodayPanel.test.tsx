@@ -49,7 +49,8 @@ beforeEach(() => {
   apiMock.openLink.mockResolvedValue(undefined);
 });
 
-const renderPanel = () => render(<TodayPanel pinned onTogglePin={() => Promise.resolve()} />);
+const noop = () => Promise.resolve();
+const renderPanel = () => render(<TodayPanel pinned onTogglePin={noop} mini={false} onToggleMini={noop} />);
 
 test("shows date, progress and chips", async () => {
   renderPanel();
@@ -109,7 +110,7 @@ test("load failure shows a retry button", async () => {
 test("failed pin toggle shows the error", async () => {
   const user = userEvent.setup();
   const onTogglePin = vi.fn().mockRejectedValueOnce("고정하지 못했어요");
-  render(<TodayPanel pinned onTogglePin={onTogglePin} />);
+  render(<TodayPanel pinned onTogglePin={onTogglePin} mini={false} onToggleMini={noop} />);
   await user.click(await screen.findByRole("button", { name: "맨 위 고정 해제" }));
   expect(await screen.findByText("고정하지 못했어요")).toBeInTheDocument();
 });
@@ -169,4 +170,28 @@ test.each([
   apiMock.today.mockResolvedValue({ ...view, rest, pending: [], done: [] });
   renderPanel();
   expect(await screen.findByText(message)).toBeInTheDocument();
+});
+
+test("mini mode shows only a pill with progress and overdue count", async () => {
+  const user = userEvent.setup();
+  const onToggleMini = vi.fn().mockResolvedValue(undefined);
+  apiMock.today.mockResolvedValue({
+    ...view,
+    pending: [item(1, "출결 확인", { dueTime: "09:00", overdue: true }), item(2, "공문 확인")],
+    done: [item(3, "수업 준비", { completedAt: "2026-10-05T08:30:00" })],
+  });
+  render(<TodayPanel pinned onTogglePin={noop} mini onToggleMini={onToggleMini} />);
+  const pill = await screen.findByRole("button", { name: "크게 보기 · 오늘 할 일 3개 중 1개 완료 · 마감 지난 일 1개" });
+  expect(pill).toHaveTextContent("1/3");
+  expect(screen.queryByText("출결 확인")).not.toBeInTheDocument();
+  await user.click(pill);
+  expect(onToggleMini).toHaveBeenCalledTimes(1);
+});
+
+test("the header can shrink the widget into mini mode", async () => {
+  const user = userEvent.setup();
+  const onToggleMini = vi.fn().mockResolvedValue(undefined);
+  render(<TodayPanel pinned onTogglePin={noop} mini={false} onToggleMini={onToggleMini} />);
+  await user.click(await screen.findByRole("button", { name: "작게 보기" }));
+  expect(onToggleMini).toHaveBeenCalledTimes(1);
 });

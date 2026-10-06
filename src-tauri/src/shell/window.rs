@@ -17,7 +17,8 @@ pub const MANAGER: &str = "manager";
 /// WebView2는 같은 데이터 폴더의 창끼리 인자가 같아야 하므로 tauri.conf.json 위젯 창과 반드시 같은 값을 쓴다.
 pub const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu";
 const MARGIN: f64 = 12.0;
-const MIN_HEIGHT: f64 = 100.0;
+/// 미니 모드(알약 모양)도 들어가도록 낮게 둔다
+const MIN_HEIGHT: f64 = 40.0;
 
 pub fn show_widget(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(WIDGET) {
@@ -25,6 +26,16 @@ pub fn show_widget(app: &AppHandle) {
         let _ = w.unminimize();
         let _ = w.set_focus();
         set_low_memory(&w, false);
+    }
+}
+
+/// 단축키(Ctrl+Alt+G): 보이면 숨기고, 숨겨져 있으면 띄운다.
+pub fn toggle_widget(app: &AppHandle) {
+    let visible = app.get_webview_window(WIDGET).and_then(|w| w.is_visible().ok()).unwrap_or(false);
+    if visible {
+        hide_widget(app);
+    } else {
+        show_widget(app);
     }
 }
 
