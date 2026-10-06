@@ -212,6 +212,8 @@ export function installMockBackend() {
         changed();
         return settings;
       }
+      case "holiday_coverage":
+        return { lastYear: 2027, state: "ok" };
       case "set_vacation":
         settings = { ...settings, vacationStart: (args.start as string | null) ?? null, vacationEnd: (args.end as string | null) ?? null };
         changed();

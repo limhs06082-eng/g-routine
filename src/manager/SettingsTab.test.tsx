@@ -11,6 +11,7 @@ const apiMock = vi.hoisted(() => ({
   exportBackup: vi.fn(),
   importBackup: vi.fn(),
   setVacation: vi.fn(),
+  holidayCoverage: vi.fn(() => Promise.resolve({ lastYear: 2027, state: "ok" })),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => ({
@@ -18,7 +19,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   api: apiMock,
 }));
 
-import { SettingsTab } from "./SettingsTab";
+import { holidayHint, SettingsTab } from "./SettingsTab";
 import { vacationLabel } from "./VacationSetting";
 
 const settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, miniMode: false, vacationStart: null, vacationEnd: null };
@@ -149,4 +150,12 @@ test("mini mode can be switched on from settings", async () => {
   render(<SettingsTab settings={settings} status={status} onChange={onChange} />);
   await user.click(screen.getByRole("switch", { name: "작게 보기" }));
   expect(onChange).toHaveBeenCalledWith("mini_mode", "true");
+});
+
+test("the holiday row says how far the table goes and warns when it runs out", async () => {
+  render(<SettingsTab settings={settings} status={status} onChange={vi.fn()} />);
+  expect(await screen.findByText(/2027년까지 들어 있고/)).toBeInTheDocument();
+  expect(holidayHint({ lastYear: 2027, state: "endingSoon" })).toBe("2028년 공휴일 정보가 아직 없어요. 발표되면 인터넷으로 자동으로 받아요");
+  expect(holidayHint({ lastYear: 2027, state: "missing" })).toMatch(/올해 공휴일 정보가 아직 없어서/);
+  expect(holidayHint(null)).toBe("설날 · 추석 · 대체공휴일 등");
 });

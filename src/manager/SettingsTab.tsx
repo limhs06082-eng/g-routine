@@ -4,7 +4,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { api, errorMessage, type AppStatus, type SettingKey, type Settings, type ThemeName } from "@/lib/api";
+import { api, errorMessage, type AppStatus, type HolidayCoverage, type SettingKey, type Settings, type ThemeName } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatHour } from "./calendar";
 import { todayString } from "./routines";
@@ -19,12 +19,19 @@ const THEMES: { value: ThemeName; label: string; color: string }[] = [
 ];
 const JSON_FILTER = [{ name: "G-routine 백업", extensions: ["json"] }];
 
-function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function holidayHint(c: HolidayCoverage | null): string {
+  if (!c || c.lastYear === null) return "설날 · 추석 · 대체공휴일 등";
+  if (c.state === "missing") return "올해 공휴일 정보가 아직 없어서 지금은 공휴일을 숨기지 못해요. 인터넷에 연결되면 자동으로 받아요";
+  if (c.state === "endingSoon") return `${c.lastYear + 1}년 공휴일 정보가 아직 없어요. 발표되면 인터넷으로 자동으로 받아요`;
+  return `설날 · 추석 · 대체공휴일 등 (${c.lastYear}년까지 들어 있고, 임시공휴일 같은 새 정보는 자동으로 받아요)`;
+}
+
+function Row({ label, hint, warn, children }: { label: string; hint?: string; warn?: boolean; children: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-border py-3">
       <div>
         <div className="text-sm">{label}</div>
-        {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
+        {hint && <div className={cn("text-xs", warn ? "text-chip-due-ink" : "text-muted-foreground")}>{hint}</div>}
       </div>
       {children}
     </div>
@@ -40,10 +47,15 @@ interface Props {
 export function SettingsTab({ settings, status, onChange }: Props) {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [version, setVersion] = useState<string | null>(null);
+  const [coverage, setCoverage] = useState<HolidayCoverage | null>(null);
   useEffect(() => {
     getVersion()
       .then(setVersion)
       .catch(() => setVersion(null));
+    api
+      .holidayCoverage()
+      .then(setCoverage)
+      .catch(() => setCoverage(null));
   }, []);
   const [shownDir, setShownDir] = useState<string | null>(null);
   const dataDir = shownDir ?? status.dataDir;
@@ -123,7 +135,7 @@ export function SettingsTab({ settings, status, onChange }: Props) {
       <Row label="주말에는 숨기기" hint="토 · 일에는 반복 루틴을 띄우지 않아요">
         <Switch aria-label="주말에는 숨기기" checked={settings.hideWeekends} onCheckedChange={toggle("hide_weekends")} />
       </Row>
-      <Row label="공휴일에는 숨기기" hint="설날 · 추석 · 대체공휴일 등 (2027년까지 들어 있어요)">
+      <Row label="공휴일에는 숨기기" hint={holidayHint(coverage)} warn={coverage !== null && coverage.state !== "ok"}>
         <Switch aria-label="공휴일에는 숨기기" checked={settings.hideHolidays} onCheckedChange={toggle("hide_holidays")} />
       </Row>
       <VacationSetting settings={settings} run={run} />

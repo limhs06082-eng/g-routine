@@ -1,4 +1,5 @@
 pub mod alerts;
+pub mod holidays;
 pub mod memory;
 pub mod position;
 pub mod shortcut;

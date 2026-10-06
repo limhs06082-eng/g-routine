@@ -81,6 +81,12 @@ export interface Settings {
   vacationEnd: string | null;
 }
 
+/** 공휴일 표가 어느 해까지 있는지. endingSoon: 11월부터 내년 표가 아직 없음, missing: 올해 표가 없음 */
+export interface HolidayCoverage {
+  lastYear: number | null;
+  state: "ok" | "endingSoon" | "missing";
+}
+
 export interface AppStatus {
   ready: boolean;
   corrupt: boolean;
@@ -120,6 +126,7 @@ export const api = {
   setSetting: (key: SettingKey, value: string) => invoke<Settings>("set_setting", { key, value }),
   /** 방학 기간을 정하거나(시작일·끝나는 날) 둘 다 null로 해제한다 */
   setVacation: (start: string | null, end: string | null) => invoke<Settings>("set_vacation", { start, end }),
+  holidayCoverage: () => invoke<HolidayCoverage>("holiday_coverage"),
   openLink: (routineId: number) => invoke<void>("open_link", { routineId }),
   exportBackup: (path: string) => invoke<void>("export_backup", { path }),
   importBackup: (path: string) => invoke<void>("import_backup", { path }),

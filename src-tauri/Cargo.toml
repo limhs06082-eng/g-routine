@@ -29,6 +29,9 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
 tauri-plugin-updater = "2"
 tauri-plugin-notification = "2"
+# 공휴일 표 내려받기: 자동 업데이트(updater)가 이미 쓰는 것과 같은 HTTP · TLS 구성을 함께 쓴다
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "system-proxy"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.45", features = ["Win32_Storage_FileSystem"] }

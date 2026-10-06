@@ -44,6 +44,8 @@ pub fn run() {
             shell::startup(app.handle())?;
             shell::update::spawn_update_checker(app.handle().clone());
             shell::alerts::spawn_due_alerts(app.handle().clone());
+            shell::holidays::load_cached(app.handle());
+            shell::holidays::spawn_holiday_refresher(app.handle().clone());
             let shortcut = shell::shortcut::register(app.handle());
             app.state::<state::AppState>().shortcut.store(shortcut, std::sync::atomic::Ordering::Relaxed);
             Ok(())
@@ -68,6 +70,7 @@ pub fn run() {
             commands::get_settings,
             commands::set_setting,
             commands::set_vacation,
+            commands::holiday_coverage,
             commands::open_link,
             commands::export_backup,
             commands::import_backup,

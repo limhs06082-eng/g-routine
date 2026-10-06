@@ -57,7 +57,7 @@ pub fn export(c: &Connection, now: &str) -> AppResult<BackupFile> {
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
-    let mut st = c.prepare("SELECT key, value FROM settings WHERE key NOT LIKE 'window_%' AND key <> 'synced_day' ORDER BY key")?;
+    let mut st = c.prepare("SELECT key, value FROM settings WHERE key NOT LIKE 'window_%' AND key NOT IN ('synced_day', 'holidays_cache') ORDER BY key")?;
     let settings = st
         .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
         .collect::<Result<Vec<_>, _>>()?;

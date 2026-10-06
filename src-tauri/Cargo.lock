@@ -1203,7 +1203,9 @@ name = "g-routine"
 version = "0.2.0"
 dependencies = [
  "chrono",
+ "reqwest",
  "rusqlite",
+ "rustls",
  "serde",
  "serde_json",
  "tauri",

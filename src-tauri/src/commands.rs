@@ -16,6 +16,14 @@ fn changed(app: &AppHandle) {
     let _ = app.emit(DATA_CHANGED, ());
 }
 
+/// 공휴일 표가 어느 해까지 있는지 (설정 탭 안내용)
+#[tauri::command]
+pub fn holiday_coverage(state: State<'_, AppState>) -> crate::domain::holidays::Coverage {
+    use crate::domain::holidays;
+    let today = state.with_conn(|c| service::today(c, now())).unwrap_or_else(|_| now().date());
+    holidays::coverage(holidays::last_known_year(), today)
+}
+
 #[tauri::command]
 pub fn get_status(state: State<'_, AppState>) -> AppStatus {
     state.status()
