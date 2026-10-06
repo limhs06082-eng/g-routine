@@ -38,9 +38,9 @@ Set-FirstMatch "src-tauri/Cargo.toml" '^version = "\d+\.\d+\.\d+"' "version = `"
 
 # 2. 서명 빌드 (설치 파일 + .sig)
 $env:TAURI_SIGNING_PRIVATE_KEY = (Get-Content $keyPath -Raw)
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""   # PowerShell은 빈 값이면 변수를 만들지 않는다(키에 비밀번호가 없어 괜찮음)
 Run "서명 빌드" { npm run tauri build }
-Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY, Env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY, Env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD -ErrorAction SilentlyContinue
 
 $setupName = "G-routine_${Version}_x64-setup.exe"
 $setup = Join-Path $root "src-tauri/target/release/bundle/nsis/$setupName"
