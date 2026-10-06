@@ -153,7 +153,7 @@ test("an item past its due time shows a red due chip", async () => {
     pending: [item(1, "출결 확인", { dueTime: "09:00", overdue: true }), item(2, "공문 확인", { dueTime: "15:00" })],
   });
   renderPanel();
-  const late = (await screen.findByText("마감 09:00 지남")).parentElement as HTMLElement;
+  const late = await screen.findByTitle("마감 09:00 지남");
   expect(late).toHaveTextContent("09:00");
   expect(late.className).toMatch(/text-danger/);
   expect(screen.getByText("15:00").className).not.toMatch(/text-danger/);

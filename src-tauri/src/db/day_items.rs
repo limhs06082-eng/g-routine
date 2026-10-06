@@ -32,36 +32,37 @@ fn item_from_row(r: &Row) -> rusqlite::Result<DayItem> {
 
 const SYNCED_DAY_KEY: &str = "synced_day";
 
-/// 지금까지 맞춘 가장 늦은 업무일 (기록 키가 없으면 남아 있는 기록 중 가장 늦은 날)
+/// 지금까지 맞춘 가장 늦은 업무일. 기록 키가 기준이고, 키가 없을 때(예전 버전 DB, 백업 복원 직후)만
+/// 남아 있는 기록 중 가장 늦은 날을 쓴다.
 fn last_synced_day(c: &Connection) -> AppResult<Option<NaiveDate>> {
     let mark: Option<String> = c
         .query_row("SELECT value FROM settings WHERE key = ?1", [SYNCED_DAY_KEY], |r| r.get(0))
         .optional()?;
-    let latest: Option<String> = c.query_row("SELECT MAX(day) FROM day_items", [], |r| r.get(0))?;
-    Ok(mark.max(latest).as_deref().and_then(parse_day))
+    let mark = match mark {
+        Some(m) => Some(m),
+        None => c.query_row("SELECT MAX(day) FROM day_items", [], |r| r.get(0))?,
+    };
+    Ok(mark.as_deref().and_then(parse_day))
 }
 
-/// 이미 넘어간 '어제' 기록인가: 가장 늦게 맞춘 날의 바로 전날이고 기록이 남아 있는 날.
-/// 하루 시작 시각을 늦추면 '오늘'이 하루 전으로 돌아갈 수 있는데(최대 23시간), 그 기록은 그대로 둔다.
-/// 그보다 더 이전으로 돌아간 경우는 PC 시계를 고친 것으로 보고 평소처럼 맞춘다 (목록이 멈추지 않게).
-fn is_closed_day(c: &Connection, day: NaiveDate) -> AppResult<bool> {
-    let Some(last) = last_synced_day(c)? else { return Ok(false) };
-    if day.succ_opt() != Some(last) {
-        return Ok(false);
+/// 실제로 쓸 오늘 업무일: 하루 전으로는 돌아가지 않는다.
+/// 하루 시작 시각을 늦추면(최대 23시간) 계산상 오늘이 어제가 될 수 있는데, 그때는 이미 넘어온 오늘을 그대로 쓴다.
+/// 그래서 어제 기록은 체크 · 오늘만 할 일 · 알림 어느 쪽으로도 바뀌지 않는다.
+/// 이틀 이상 이전으로 돌아간 경우는 PC 시계를 고친 것으로 보고 계산한 날을 그대로 쓴다 (목록이 멈추지 않게).
+pub fn effective_day(c: &Connection, day: NaiveDate) -> AppResult<NaiveDate> {
+    match last_synced_day(c)? {
+        Some(last) if day.succ_opt() == Some(last) => Ok(last),
+        _ => Ok(day),
     }
-    let rows: i64 = c.query_row("SELECT COUNT(*) FROM day_items WHERE day = ?1", [fmt_day(day)], |r| r.get(0))?;
-    Ok(rows > 0)
 }
 
-/// 그 업무일의 할 일 스냅샷을 루틴 규칙에 맞춘다. 오늘 업무일에만 호출할 것.
+/// 그 업무일의 할 일 스냅샷을 루틴 규칙에 맞춘다. 오늘 업무일(`effective_day`)에만 호출할 것.
 /// - 새로 해당되는 루틴은 추가
-/// - 더 이상 해당하지 않는 '미완료' 항목은 제거 (완료 항목은 보존)
+/// - 더 이상 해당하지 않는 미완료 항목은 제거 (완료 항목은 보존)
 /// - 미완료 항목의 이름과 모든 항목의 순서를 루틴과 맞춤
-///
-/// 이미 넘어간 어제 기록은 건드리지 않는다 (`is_closed_day`).
 pub fn sync_day(c: &Connection, day: NaiveDate, rest_day: bool) -> AppResult<()> {
-    if is_closed_day(c, day)? {
-        return Ok(());
+    if effective_day(c, day)? != day {
+        return Ok(()); // 이미 넘어간 어제 기록은 건드리지 않는다
     }
     let d = fmt_day(day);
     let all = routines::list_unarchived(c)?;

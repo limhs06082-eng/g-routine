@@ -8,9 +8,13 @@ use crate::db::{day_items, routines, settings};
 use crate::error::{AppError, AppResult};
 use crate::model::{DayItem, DaySummary, RepeatType, Routine, RoutineInput, Settings, TodayView};
 
+/// 지금의 업무일 (하루 시작 시각을 늦춰도 어제로 돌아가지 않는다: `day_items::effective_day`)
+fn current_day(c: &Connection, s: &Settings, now: NaiveDateTime) -> AppResult<NaiveDate> {
+    day_items::effective_day(c, business_day(now, s.day_start_hour))
+}
+
 pub fn today(c: &Connection, now: NaiveDateTime) -> AppResult<NaiveDate> {
-    let s = settings::load(c)?;
-    Ok(business_day(now, s.day_start_hour))
+    current_day(c, &settings::load(c)?, now)
 }
 
 /// 설정에서 쉬는 날 규칙을 만든다 (방학 기간은 두 날짜가 모두 있고 순서가 맞을 때만 쓴다)
@@ -24,13 +28,13 @@ fn rest_rules(s: &Settings) -> RestRules {
 
 pub fn resync_today(c: &Connection, now: NaiveDateTime) -> AppResult<()> {
     let s = settings::load(c)?;
-    let day = business_day(now, s.day_start_hour);
+    let day = current_day(c, &s, now)?;
     day_items::sync_day(c, day, rest_day(day, &rest_rules(&s)).is_some())
 }
 
 pub fn get_today(c: &Connection, now: NaiveDateTime) -> AppResult<TodayView> {
     let s = settings::load(c)?;
-    let day = business_day(now, s.day_start_hour);
+    let day = current_day(c, &s, now)?;
     let rest = rest_day(day, &rest_rules(&s));
     day_items::sync_day(c, day, rest.is_some())?;
     let (done, mut pending): (Vec<DayItem>, Vec<DayItem>) = day_items::items_for_day(c, &fmt_day(day))?
@@ -66,7 +70,7 @@ pub fn set_vacation(c: &Connection, start: Option<&str>, end: Option<&str>, now:
 /// 오늘 업무일에서 끝내지 않았고 마감 시각이 지난 항목 (알림용, DB를 바꾸지 않는다)
 pub fn overdue_items(c: &Connection, now: NaiveDateTime) -> AppResult<Vec<DayItem>> {
     let s = settings::load(c)?;
-    let day = business_day(now, s.day_start_hour);
+    let day = current_day(c, &s, now)?;
     let items = day_items::items_for_day(c, &fmt_day(day))?;
     Ok(due::overdue(&items, day, now, s.day_start_hour)
         .into_iter()
@@ -452,13 +456,27 @@ mod tests {
         get_today(&c, at(MON)).unwrap(); // 월요일 기록: 두 항목 모두 미완료
         get_today(&c, at(TUE)).unwrap(); // 화요일로 넘어감
 
-        // 화요일 오전 9시에 하루 시작 시각을 오후 3시로 바꾸면 업무일 계산상 오늘이 월요일이 된다
+        // 화요일 오전 9시에 하루 시작 시각을 오후 3시로 바꾸면 계산상 오늘은 월요일이지만 화요일을 그대로 쓴다
         archive_routine(&c, a, at(TUE)).unwrap();
         set_setting(&c, "day_start_hour", "15", at(TUE)).unwrap();
         let v = get_today(&c, at(TUE)).unwrap();
-        assert_eq!(v.day, "2026-10-12");
-        // 월요일 기록은 그대로 남아야 한다 (보관한 루틴의 미완료 항목도 지워지지 않음)
+        assert_eq!(v.day, "2026-10-13");
+        assert_eq!(titles(&v.pending), vec!["공문 확인"]);
+        // 월요일 기록은 그대로 (보관한 루틴의 미완료 항목도 지워지지 않음)
         assert_eq!(titles(&history_day(&c, "2026-10-12").unwrap()), vec!["출결 확인", "공문 확인"]);
+
+        // 그 사이의 체크와 오늘만 할 일도 화요일에 들어간다
+        set_done(&c, v.pending[0].id, true, at("2026-10-13 09:30")).unwrap();
+        quick_add(&c, "가정통신문 배부", at("2026-10-13 09:40")).unwrap();
+        let v = get_today(&c, at("2026-10-13 09:50")).unwrap();
+        assert_eq!(titles(&v.done), vec!["공문 확인"]);
+        assert_eq!(titles(&v.pending), vec!["가정통신문 배부"]);
+        assert!(history_day(&c, "2026-10-12").unwrap().iter().all(|i| i.completed_at.is_none()));
+
+        // 오후 3시가 지나도 화요일이 이어지고, 시각을 다시 앞당겨도 화요일이다
+        assert_eq!(get_today(&c, at("2026-10-13 16:00")).unwrap().day, "2026-10-13");
+        set_setting(&c, "day_start_hour", "4", at("2026-10-13 16:00")).unwrap();
+        assert_eq!(get_today(&c, at("2026-10-13 16:00")).unwrap().day, "2026-10-13");
     }
 
     #[test]
@@ -472,6 +490,21 @@ mod tests {
         archive_routine(&c, a, at(HANGUL_DAY)).unwrap();
         set_setting(&c, "day_start_hour", "15", at(HANGUL_DAY)).unwrap();
         assert_eq!(titles(&history_day(&c, "2026-10-08").unwrap()), vec!["출결 확인", "공문 확인"]);
+    }
+
+    #[test]
+    fn a_clock_that_ran_ahead_does_not_freeze_the_day_it_already_visited() {
+        let c = open_in_memory().unwrap();
+        create_routine(&c, input_daily("출결 확인"), at(MON)).unwrap();
+        get_today(&c, at("2026-10-19 09:00")).unwrap(); // 시계가 앞서 있던 때
+        get_today(&c, at("2026-10-20 09:00")).unwrap();
+        get_today(&c, at(TUE)).unwrap(); // 시계를 고침
+
+        // 실제 19일이 되면 그날 목록이 평소처럼 맞춰진다 (20일로 붙잡히지 않음)
+        create_routine(&c, input_daily("공문 확인"), at("2026-10-19 08:00")).unwrap();
+        let v = get_today(&c, at("2026-10-19 09:00")).unwrap();
+        assert_eq!(v.day, "2026-10-19");
+        assert_eq!(titles(&v.pending), vec!["출결 확인", "공문 확인"]);
     }
 
     #[test]

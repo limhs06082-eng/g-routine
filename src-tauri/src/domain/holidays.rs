@@ -78,6 +78,7 @@ mod tests {
         assert_eq!(holiday_name(date("2026-10-05")), Some("대체공휴일(개천절)"));
         assert_eq!(holiday_name(date("2027-07-19")), Some("대체공휴일(제헌절)"));
         assert_eq!(holiday_name(date("2026-06-03")), Some("지방선거일"));
+        assert_eq!(holiday_name(date("2026-07-17")), Some("제헌절"));
         assert_eq!(holiday_name(date("2026-10-06")), None);
     }
 
