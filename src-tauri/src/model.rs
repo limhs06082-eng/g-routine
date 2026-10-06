@@ -145,4 +145,6 @@ pub struct Settings {
     /// 방학 · 쉬는 기간 (YYYY-MM-DD, 둘 다 있거나 둘 다 없다)
     pub vacation_start: Option<String>,
     pub vacation_end: Option<String>,
+    /// '바뀐 점' 안내를 마지막으로 본 버전 (없으면 v0.2.0 이하에서 올라온 것)
+    pub seen_version: Option<String>,
 }

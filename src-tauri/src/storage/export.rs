@@ -57,7 +57,7 @@ pub fn export(c: &Connection, now: &str) -> AppResult<BackupFile> {
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
-    let mut st = c.prepare("SELECT key, value FROM settings WHERE key NOT LIKE 'window_%' AND key NOT IN ('synced_day', 'holidays_cache') ORDER BY key")?;
+    let mut st = c.prepare("SELECT key, value FROM settings WHERE key NOT LIKE 'window_%' AND key NOT IN ('synced_day', 'holidays_cache', 'seen_version') ORDER BY key")?;
     let settings = st
         .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
         .collect::<Result<Vec<_>, _>>()?;
@@ -77,7 +77,8 @@ pub fn import(c: &Connection, b: &BackupFile) -> AppResult<()> {
     let tx = c.unchecked_transaction()?;
     tx.execute("DELETE FROM day_items", [])?;
     tx.execute("DELETE FROM routines", [])?;
-    tx.execute("DELETE FROM settings WHERE key NOT LIKE 'window_%'", [])?;
+    // 창 위치와 '바뀐 점' 안내를 본 버전은 이 PC의 것이라 그대로 둔다
+    tx.execute("DELETE FROM settings WHERE key NOT LIKE 'window_%' AND key <> 'seen_version'", [])?;
     for r in &b.routines {
         tx.execute(
             "INSERT INTO routines (id, title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, archived_at, slot)
@@ -106,7 +107,7 @@ pub fn import(c: &Connection, b: &BackupFile) -> AppResult<()> {
     }
     for (k, v) in &b.settings {
         // Skip window position settings to preserve UI state
-        if k.starts_with("window_") {
+        if k.starts_with("window_") || k == settings::SEEN_VERSION {
             continue;
         }
         // Use settings::apply for validation and upserting; silently skip invalid pairs
@@ -237,6 +238,19 @@ mod tests {
         let json = r#"{"app":"g-routine","version":1,"exportedAt":"","routines":[{"id":1,"title":"출결 확인","repeatType":"daily","weekdays":0,"onceDate":null,"dueTime":null,"link":null,"sortOrder":0,"createdAt":"2026-10-01T09:00:00","archivedAt":null}],"dayItems":[],"settings":[]}"#;
         let b: BackupFile = serde_json::from_str(json).unwrap();
         assert_eq!(b.routines[0].slot, None);
+    }
+
+    #[test]
+    fn the_seen_version_belongs_to_this_pc_and_is_not_restored() {
+        let src = open_in_memory().unwrap();
+        settings::apply(&src, settings::SEEN_VERSION, "0.2.0").unwrap();
+        let backup = export(&src, "2026-10-12T10:00:00").unwrap();
+        assert!(backup.settings.iter().all(|(k, _)| k != settings::SEEN_VERSION));
+
+        let dst = open_in_memory().unwrap();
+        settings::apply(&dst, settings::SEEN_VERSION, "0.3.0").unwrap();
+        import(&dst, &backup).unwrap();
+        assert_eq!(settings::load(&dst).unwrap().seen_version.as_deref(), Some("0.3.0"));
     }
 
     #[test]

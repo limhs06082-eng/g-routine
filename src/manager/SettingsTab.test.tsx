@@ -22,7 +22,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 import { holidayHint, SettingsTab } from "./SettingsTab";
 import { vacationLabel } from "./VacationSetting";
 
-const settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, miniMode: false, vacationStart: null, vacationEnd: null };
+const settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, miniMode: false, vacationStart: null, vacationEnd: null, seenVersion: null };
 const status: AppStatus = {
   ready: true,
   corrupt: false,

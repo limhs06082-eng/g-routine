@@ -36,7 +36,7 @@ const routines: Routine[] = [
   routine(7, "가정통신문 회수", { repeatType: "once", onceDate: TODAY }),
 ];
 const doneAt = new Map<number, string>([[2, `${TODAY}T08:55:00`]]);
-let settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, miniMode: false, vacationStart: null, vacationEnd: null };
+let settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, miniMode: false, vacationStart: null, vacationEnd: null, seenVersion: null };
 let ready = new URLSearchParams(window.location.search).get("setup") !== "1";
 const DATA_DIR = "D:\\G-routine\\data";
 
@@ -134,6 +134,7 @@ const KEY_MAP: Record<string, keyof Settings> = {
   due_alerts: "dueAlerts",
   hide_holidays: "hideHolidays",
   mini_mode: "miniMode",
+  seen_version: "seenVersion",
 };
 
 export function installMockBackend() {
@@ -143,7 +144,7 @@ export function installMockBackend() {
     const args = (payload ?? {}) as Record<string, unknown>;
     if (cmd.startsWith("plugin:event|")) return 0;
     if (cmd.startsWith("plugin:dialog|")) return null;
-    if (cmd === "plugin:app|version") return "0.1.0";
+    if (cmd === "plugin:app|version") return "0.3.0";
     switch (cmd) {
       case "get_status":
         return status();
@@ -207,7 +208,7 @@ export function installMockBackend() {
       case "set_setting": {
         const field = KEY_MAP[args.key as string];
         const raw = args.value as string;
-        const value = field === "dayStartHour" ? Number(raw) : field === "theme" ? raw : raw === "true";
+        const value = field === "dayStartHour" ? Number(raw) : field === "theme" || field === "seenVersion" ? raw : raw === "true";
         settings = { ...settings, [field]: value } as Settings;
         changed();
         return settings;

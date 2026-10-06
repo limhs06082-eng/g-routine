@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronUp, Coffee, PartyPopper } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api, errorMessage, type DayItem, type Rest, type TodayView } from "@/lib/api";
@@ -61,9 +61,11 @@ interface Props {
   /** 미니 모드(알약 모양)로 보여 줄지 */
   mini: boolean;
   onToggleMini: () => Promise<unknown>;
+  /** 머리글 바로 아래에 보일 안내 (예: 업데이트 뒤 '바뀐 점') */
+  banner?: ReactNode;
 }
 
-export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini }: Props) {
+export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini, banner }: Props) {
   const { data, error, reload, setData } = useData(api.today);
   const [leaving, setLeaving] = useState<number[]>([]);
   const [undoItem, setUndoItem] = useState<DayItem | null>(null);
@@ -149,6 +151,7 @@ export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini }: Props) {
         onTogglePin={() => void onTogglePin().catch((e) => setNotice(errorMessage(e)))}
         onShrink={() => void onToggleMini().catch((e) => setNotice(errorMessage(e)))}
       />
+      {banner}
       <div className="px-3.5 pb-2.5">
         <div className="mb-1 flex justify-between text-xs text-muted-foreground">
           <span>오늘의 루틴</span>

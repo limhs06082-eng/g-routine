@@ -43,10 +43,20 @@ pub fn load(c: &Connection) -> AppResult<Settings> {
             .and_then(|v| v.parse::<u32>().ok())
             .filter(|h| *h < 24)
             .unwrap_or(4),
+        seen_version: get(c, SEEN_VERSION)?.filter(|v| is_version(v)),
         theme: get(c, "theme")?
             .filter(|t| THEMES.contains(&t.as_str()))
             .unwrap_or_else(|| "lavender".into()),
     })
+}
+
+/// '바뀐 점' 안내를 마지막으로 본 앱 버전. 새로 설치할 때는 그 버전을 적어 두어 안내를 띄우지 않는다.
+pub const SEEN_VERSION: &str = "seen_version";
+
+/// 0.3.0 같은 버전 문자열인지
+fn is_version(v: &str) -> bool {
+    let parts: Vec<&str> = v.split('.').collect();
+    parts.len() == 3 && parts.iter().all(|p| !p.is_empty() && p.len() <= 5 && p.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// 사용자가 바꿀 수 있는 설정만 검증 후 저장한다.
@@ -57,6 +67,8 @@ pub fn apply(c: &Connection, key: &str, value: &str) -> AppResult<()> {
         value.parse::<u32>().map(|h| h < 24).unwrap_or(false)
     } else if key == "theme" {
         THEMES.contains(&value)
+    } else if key == SEEN_VERSION {
+        is_version(value)
     } else {
         return Err(AppError::invalid("알 수 없는 설정이에요"));
     };
@@ -136,6 +148,7 @@ mod tests {
                 mini_mode: false,
                 vacation_start: None,
                 vacation_end: None,
+                seen_version: None,
             }
         );
     }
@@ -155,6 +168,17 @@ mod tests {
         assert!(apply(&c, "day_start_hour", "24").is_err());
         assert!(apply(&c, "theme", "black").is_err());
         assert!(apply(&c, "window_x", "10").is_err());
+    }
+
+    #[test]
+    fn seen_version_accepts_only_plain_versions() {
+        let c = open_in_memory().unwrap();
+        assert_eq!(load(&c).unwrap().seen_version, None);
+        apply(&c, SEEN_VERSION, "0.3.0").unwrap();
+        assert_eq!(load(&c).unwrap().seen_version.as_deref(), Some("0.3.0"));
+        for bad in ["0.3", "v0.3.0", "0.3.0-beta", "0..1", "1.2.3.4", ""] {
+            assert!(apply(&c, SEEN_VERSION, bad).is_err(), "{bad}");
+        }
     }
 
     #[test]

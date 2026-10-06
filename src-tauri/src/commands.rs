@@ -32,6 +32,9 @@ pub fn get_status(state: State<'_, AppState>) -> AppStatus {
 #[tauri::command]
 pub fn setup(app: AppHandle, state: State<'_, AppState>, dir: String, template: String) -> AppResult<()> {
     startup::setup(&state, Path::new(&dir), &template, now())?;
+    // 새로 설치한 사람에게는 '바뀐 점' 안내를 띄우지 않는다
+    let version = app.package_info().version.to_string();
+    let _ = state.with_conn(|c| settings::apply(c, settings::SEEN_VERSION, &version));
     shell::after_ready(&app);
     changed(&app);
     Ok(())

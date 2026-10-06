@@ -4,7 +4,7 @@ export type RepeatType = "daily" | "weekdays" | "once";
 /** 하루 중 언제 하는 일인지: 조회 전 · 수업 중 · 방과 후 (없으면 언제든) */
 export type Slot = "morning" | "class" | "after";
 export type ThemeName = "lavender" | "mint" | "peach" | "sky" | "lemon";
-export type SettingKey = "always_on_top" | "autostart" | "hide_weekends" | "day_start_hour" | "theme" | "due_alerts" | "hide_holidays" | "mini_mode";
+export type SettingKey = "always_on_top" | "autostart" | "hide_weekends" | "day_start_hour" | "theme" | "due_alerts" | "hide_holidays" | "mini_mode" | "seen_version";
 export type TemplateName = "homeroom" | "subject" | "empty";
 
 export interface Routine {
@@ -79,6 +79,8 @@ export interface Settings {
   /** 방학 · 쉬는 기간 (YYYY-MM-DD, 둘 다 있거나 둘 다 없다) */
   vacationStart: string | null;
   vacationEnd: string | null;
+  /** '바뀐 점' 안내를 마지막으로 본 버전 (없으면 v0.2.0 이하에서 올라온 것) */
+  seenVersion: string | null;
 }
 
 /** 공휴일 표가 어느 해까지 있는지. endingSoon: 11월부터 내년 표가 아직 없음, missing: 올해 표가 없음 */

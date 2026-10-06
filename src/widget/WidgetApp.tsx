@@ -1,9 +1,13 @@
+import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { unseenNotes } from "@/lib/changelog";
 import { useAutoResize, useData, useSettings } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { Setup } from "./Setup";
 import { TodayPanel } from "./TodayPanel";
+import { WhatsNew } from "./WhatsNew";
 
 export function WidgetApp() {
   const { data: status, error, reload } = useData(api.status);
@@ -12,12 +16,28 @@ export function WidgetApp() {
   const { ref, capped } = useAutoResize<HTMLDivElement>();
   const pinned = settings?.alwaysOnTop ?? false;
   const mini = ready && (settings?.miniMode ?? false);
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    getVersion()
+      .then(setVersion)
+      .catch(() => setVersion(null));
+  }, []);
+  // 업데이트 뒤 아직 보지 않은 '바뀐 점'. 보여 줄 것이 없으면 조용히 지금 버전을 본 것으로 적는다.
+  const seen = settings?.seenVersion ?? null;
+  const notes = settings && version && seen !== version ? unseenNotes(seen, version) : [];
+  const markSeen = settings && version && seen !== version ? version : null;
+  useEffect(() => {
+    if (markSeen && notes.length === 0) void update("seen_version", markSeen).catch(() => {});
+  }, [markSeen, notes.length, update]);
   const panel = (
     <TodayPanel
       pinned={pinned}
       onTogglePin={() => update("always_on_top", String(!pinned))}
       mini={mini}
       onToggleMini={() => update("mini_mode", String(!mini))}
+      banner={
+        notes.length > 0 && markSeen ? <WhatsNew notes={notes} onClose={() => void update("seen_version", markSeen).catch(() => {})} /> : null
+      }
     />
   );
 
