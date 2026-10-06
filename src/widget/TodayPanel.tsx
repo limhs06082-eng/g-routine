@@ -126,7 +126,7 @@ export function TodayPanel({ pinned, onTogglePin }: { pinned: boolean; onToggleP
         </div>
       </div>
       {view.pending.length > 0 ? (
-        <ul className="max-h-[252px] overflow-y-auto px-1">
+        <ul data-testid="pending-list" className="px-1">
           {view.pending.map((item) => (
             <TaskRow
               key={item.id}
@@ -163,7 +163,7 @@ export function TodayPanel({ pinned, onTogglePin }: { pinned: boolean; onToggleP
             완료 {view.done.length}개 {showDone ? "숨기기" : "보기"}
           </button>
           {showDone && (
-            <ul className="max-h-[160px] overflow-y-auto px-1 pb-1">
+            <ul className="px-1 pb-1">
               {view.done.map((item) => (
                 <DoneRow key={item.id} item={item} onUncheck={() => void uncheck(item)} />
               ))}

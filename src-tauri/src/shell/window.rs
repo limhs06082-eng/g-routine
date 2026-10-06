@@ -5,7 +5,7 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Webview
 
 use crate::db::settings;
 use crate::service;
-use crate::shell::position::{anchored_y, compute_position, Rect};
+use crate::shell::position::{compute_position, fit_height, Rect};
 use crate::state::AppState;
 use crate::{now, startup, DATA_CHANGED};
 
@@ -13,7 +13,6 @@ pub const WIDGET: &str = "widget";
 pub const MANAGER: &str = "manager";
 const MARGIN: f64 = 12.0;
 const MIN_HEIGHT: f64 = 100.0;
-const MAX_HEIGHT: f64 = 560.0;
 
 pub fn show_widget(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(WIDGET) {
@@ -79,16 +78,22 @@ pub fn reset_position(app: &AppHandle) {
 }
 
 /// 내용 높이(논리 px)에 맞춰 위젯 높이를 바꾸되 아래 모서리를 고정한다.
+/// 최대 높이는 위젯이 있는 모니터의 작업 영역 높이(여백 제외)다. 그보다 길 때만 화면 안에서 스크롤된다.
 pub fn resize_widget(app: &AppHandle, logical_height: f64) -> tauri::Result<()> {
     let Some(w) = app.get_webview_window(WIDGET) else { return Ok(()) };
+    let Some(m) = w.current_monitor()?.or(w.primary_monitor()?) else { return Ok(()) };
     let scale = w.scale_factor()?;
     let pos = w.outer_position()?;
     let old = w.outer_size()?;
-    let new_h = (logical_height.clamp(MIN_HEIGHT, MAX_HEIGHT) * scale).round() as i32;
-    if new_h == old.height as i32 {
+    let wa = m.work_area();
+    let work = Rect { x: wa.position.x, y: wa.position.y, w: wa.size.width as i32, h: wa.size.height as i32 };
+    let margin = (MARGIN * scale).round() as i32;
+    let wanted = (logical_height * scale).round() as i32;
+    let min_h = (MIN_HEIGHT * scale).round() as i32;
+    let (y, new_h) = fit_height(pos.y, old.height as i32, wanted, min_h, work, margin);
+    if new_h == old.height as i32 && y == pos.y {
         return Ok(());
     }
-    let y = anchored_y(pos.y, old.height as i32, new_h);
     mark_programmatic_move(app);
     w.set_size(PhysicalSize::new(old.width, new_h as u32))?;
     w.set_position(PhysicalPosition::new(pos.x, y))

@@ -98,6 +98,11 @@ html[data-window="widget"] body {
   user-select: none;
 }
 
+.widget-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--soft-2) transparent;
+}
+
 html[data-window="manager"] body {
   background: var(--background);
 }

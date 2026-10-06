@@ -135,3 +135,13 @@ test("all done shows a finished message", async () => {
   expect(await screen.findByText("오늘 루틴을 모두 마쳤어요")).toBeInTheDocument();
   expect(screen.getByTestId("progress-count")).toHaveTextContent("모두 완료");
 });
+
+test("long lists render every item without an inner scroll area", async () => {
+  const many = Array.from({ length: 15 }, (_, i) => item(i + 1, `루틴 ${i + 1}`));
+  apiMock.today.mockResolvedValue({ ...view, pending: many });
+  renderPanel();
+  expect(await screen.findByText("루틴 15")).toBeInTheDocument();
+  const list = screen.getByTestId("pending-list");
+  expect(list.className).not.toMatch(/overflow|max-h/);
+  expect(list.querySelectorAll("li")).toHaveLength(15);
+});

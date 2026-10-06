@@ -22,6 +22,15 @@ pub fn anchored_y(y: i32, old_h: i32, new_h: i32) -> i32 {
     y + old_h - new_h
 }
 
+/// 내용에 맞춘 새 높이와 y. 아래 모서리를 고정하고, 작업 영역 높이(위아래 여백 제외)까지만 늘린다.
+/// 위로 늘리다 작업 영역 위쪽에 닿으면 위에 붙인다.
+pub fn fit_height(y: i32, old_h: i32, wanted_h: i32, min_h: i32, work: Rect, margin: i32) -> (i32, i32) {
+    let max_h = (work.h - 2 * margin).max(min_h);
+    let h = wanted_h.clamp(min_h, max_h);
+    let top = work.y + margin;
+    (anchored_y(y, old_h, h).max(top), h)
+}
+
 /// 창 크기(w, h)에 맞는 좌상단 좌표. 저장 위치(x, 아래쪽 y)가 화면 안이면 그것을, 아니면 작업 영역 우측 하단을 쓴다.
 /// 모니터 이동으로 DPI가 바뀌어 창 크기가 달라지면 새 크기로 다시 호출한다.
 pub fn compute_position(
@@ -43,6 +52,26 @@ mod tests {
     use super::*;
 
     const FHD: Rect = Rect { x: 0, y: 0, w: 1920, h: 1080 };
+    const WORK: Rect = Rect { x: 0, y: 0, w: 1920, h: 1032 }; // 작업표시줄 48px
+
+    #[test]
+    fn fit_height_grows_upward_keeping_bottom() {
+        assert_eq!(fit_height(600, 300, 400, 100, WORK, 12), (500, 400));
+        assert_eq!(fit_height(500, 400, 250, 100, WORK, 12), (650, 250));
+    }
+
+    #[test]
+    fn fit_height_respects_minimum() {
+        assert_eq!(fit_height(600, 300, 40, 100, WORK, 12), (800, 100));
+    }
+
+    #[test]
+    fn fit_height_caps_at_work_area_and_stops_at_top() {
+        // 작업 영역 1032 - 여백 12*2 = 1008이 최대 높이
+        assert_eq!(fit_height(620, 400, 1500, 100, WORK, 12), (12, 1008));
+        // 위로 늘리다 화면 위쪽에 닿으면 위에 붙이고 아래로 늘어난다
+        assert_eq!(fit_height(100, 300, 600, 100, WORK, 12), (12, 600));
+    }
 
     #[test]
     fn bottom_right_respects_work_area_and_margin() {
