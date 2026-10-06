@@ -34,9 +34,9 @@ fn item_from_row(r: &Row) -> rusqlite::Result<DayItem> {
 /// - 새로 해당되는 루틴은 추가
 /// - 더 이상 해당하지 않는 '미완료' 항목은 제거 (완료 항목은 보존)
 /// - 미완료 항목의 이름과 모든 항목의 순서를 루틴과 맞춤
-pub fn sync_day(c: &Connection, day: NaiveDate, hide_weekends: bool) -> AppResult<()> {
+pub fn sync_day(c: &Connection, day: NaiveDate, rest_day: bool) -> AppResult<()> {
     let all = routines::list_unarchived(c)?;
-    let sched = scheduled(&all, day, hide_weekends);
+    let sched = scheduled(&all, day, rest_day);
     let d = fmt_day(day);
     let tx = c.unchecked_transaction()?;
     for r in &sched {

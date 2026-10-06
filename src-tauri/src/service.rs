@@ -1,8 +1,9 @@
 use chrono::{NaiveDate, NaiveDateTime};
 use rusqlite::Connection;
 
-use crate::domain::day::{business_day, fmt_day, fmt_ts, is_weekend, parse_day};
+use crate::domain::day::{business_day, fmt_day, fmt_ts, parse_day};
 use crate::domain::due;
+use crate::domain::rest::{rest_day, RestRules};
 use crate::db::{day_items, routines, settings};
 use crate::error::{AppError, AppResult};
 use crate::model::{DayItem, DaySummary, RepeatType, Routine, RoutineInput, Settings, TodayView};
@@ -12,15 +13,26 @@ pub fn today(c: &Connection, now: NaiveDateTime) -> AppResult<NaiveDate> {
     Ok(business_day(now, s.day_start_hour))
 }
 
+/// 설정에서 쉬는 날 규칙을 만든다 (방학 기간은 두 날짜가 모두 있고 순서가 맞을 때만 쓴다)
+fn rest_rules(s: &Settings) -> RestRules {
+    let vacation = match (s.vacation_start.as_deref().and_then(parse_day), s.vacation_end.as_deref().and_then(parse_day)) {
+        (Some(start), Some(end)) if start <= end => Some((start, end)),
+        _ => None,
+    };
+    RestRules { hide_weekends: s.hide_weekends, hide_holidays: s.hide_holidays, vacation }
+}
+
 pub fn resync_today(c: &Connection, now: NaiveDateTime) -> AppResult<()> {
     let s = settings::load(c)?;
-    day_items::sync_day(c, business_day(now, s.day_start_hour), s.hide_weekends)
+    let day = business_day(now, s.day_start_hour);
+    day_items::sync_day(c, day, rest_day(day, &rest_rules(&s)).is_some())
 }
 
 pub fn get_today(c: &Connection, now: NaiveDateTime) -> AppResult<TodayView> {
     let s = settings::load(c)?;
     let day = business_day(now, s.day_start_hour);
-    day_items::sync_day(c, day, s.hide_weekends)?;
+    let rest = rest_day(day, &rest_rules(&s));
+    day_items::sync_day(c, day, rest.is_some())?;
     let (done, mut pending): (Vec<DayItem>, Vec<DayItem>) = day_items::items_for_day(c, &fmt_day(day))?
         .into_iter()
         .partition(|i| i.completed_at.is_some());
@@ -28,7 +40,27 @@ pub fn get_today(c: &Connection, now: NaiveDateTime) -> AppResult<TodayView> {
     for item in &mut pending {
         item.overdue = late.contains(&item.id);
     }
-    Ok(TodayView { day: fmt_day(day), weekend_hidden: s.hide_weekends && is_weekend(day), pending, done })
+    Ok(TodayView { day: fmt_day(day), rest, pending, done })
+}
+
+/// 방학 · 쉬는 기간을 정하거나(시작일과 끝나는 날 모두) 해제한다(둘 다 없음).
+pub fn set_vacation(c: &Connection, start: Option<&str>, end: Option<&str>, now: NaiveDateTime) -> AppResult<Settings> {
+    let range = match (start, end) {
+        (None, None) => None,
+        (Some(s), Some(e)) => {
+            let (Some(sd), Some(ed)) = (parse_day(s), parse_day(e)) else {
+                return Err(AppError::invalid("날짜 형식이 올바르지 않아요"));
+            };
+            if sd > ed {
+                return Err(AppError::invalid("시작일이 끝나는 날보다 늦어요. 날짜를 다시 골라 주세요"));
+            }
+            Some((fmt_day(sd), fmt_day(ed)))
+        }
+        _ => return Err(AppError::invalid("시작일과 끝나는 날을 모두 골라 주세요")),
+    };
+    settings::set_vacation(c, range.as_ref().map(|(s, e)| (s.as_str(), e.as_str())))?;
+    resync_today(c, now)?;
+    settings::load(c)
 }
 
 /// 오늘 업무일에서 끝내지 않았고 마감 시각이 지난 항목 (알림용, DB를 바꾸지 않는다)
@@ -105,7 +137,7 @@ pub fn history_day(c: &Connection, day: &str) -> AppResult<Vec<DayItem>> {
 
 pub fn set_setting(c: &Connection, key: &str, value: &str, now: NaiveDateTime) -> AppResult<Settings> {
     settings::apply(c, key, value)?;
-    if key == "hide_weekends" || key == "day_start_hour" {
+    if key == "hide_weekends" || key == "hide_holidays" || key == "day_start_hour" {
         resync_today(c, now)?;
     }
     settings::load(c)
@@ -115,16 +147,17 @@ pub fn set_setting(c: &Connection, key: &str, value: &str, now: NaiveDateTime) -
 mod tests {
     use super::*;
     use crate::db::open_in_memory;
+    use crate::domain::rest::RestKind;
     use crate::test_util::{at, input_daily, input_once, input_weekdays};
 
     fn titles(items: &[DayItem]) -> Vec<&str> {
         items.iter().map(|i| i.title.as_str()).collect()
     }
 
-    const MON: &str = "2026-10-05 09:00";
-    const TUE: &str = "2026-10-06 09:00";
-    const FRI: &str = "2026-10-09 09:00";
-    const SAT: &str = "2026-10-10 09:00";
+    const MON: &str = "2026-10-12 09:00";
+    const TUE: &str = "2026-10-13 09:00";
+    const FRI: &str = "2026-10-16 09:00";
+    const SAT: &str = "2026-10-17 09:00";
 
     #[test]
     fn today_lists_daily_and_matching_weekday_routines() {
@@ -133,7 +166,7 @@ mod tests {
         create_routine(&c, input_weekdays("주간학습안내", 16), at(MON)).unwrap();
 
         let mon = get_today(&c, at(MON)).unwrap();
-        assert_eq!(mon.day, "2026-10-05");
+        assert_eq!(mon.day, "2026-10-12");
         assert_eq!(titles(&mon.pending), vec!["출결 확인"]);
 
         let fri = get_today(&c, at(FRI)).unwrap();
@@ -152,8 +185,8 @@ mod tests {
     #[test]
     fn early_morning_belongs_to_previous_business_day() {
         let c = open_in_memory().unwrap();
-        let v = get_today(&c, at("2026-10-06 01:30")).unwrap();
-        assert_eq!(v.day, "2026-10-05");
+        let v = get_today(&c, at("2026-10-13 01:30")).unwrap();
+        assert_eq!(v.day, "2026-10-12");
     }
 
     #[test]
@@ -162,10 +195,10 @@ mod tests {
         create_routine(&c, input_daily("출결 확인"), at(MON)).unwrap();
         let item = get_today(&c, at(MON)).unwrap().pending[0].clone();
 
-        set_done(&c, item.id, true, at("2026-10-05 08:47")).unwrap();
+        set_done(&c, item.id, true, at("2026-10-12 08:47")).unwrap();
         let v = get_today(&c, at(MON)).unwrap();
         assert!(v.pending.is_empty());
-        assert_eq!(v.done[0].completed_at.as_deref(), Some("2026-10-05T08:47:00"));
+        assert_eq!(v.done[0].completed_at.as_deref(), Some("2026-10-12T08:47:00"));
 
         set_done(&c, item.id, false, at(MON)).unwrap();
         let v = get_today(&c, at(MON)).unwrap();
@@ -192,7 +225,7 @@ mod tests {
         let tue = get_today(&c, at(TUE)).unwrap();
         assert_eq!(titles(&tue.pending), vec!["누가기록 작성", "공문 처리"]);
         // 월요일 기록은 그대로
-        assert_eq!(titles(&history_day(&c, "2026-10-05").unwrap()), vec!["누가기록 작성", "공문 확인"]);
+        assert_eq!(titles(&history_day(&c, "2026-10-12").unwrap()), vec!["누가기록 작성", "공문 확인"]);
     }
 
     #[test]
@@ -221,7 +254,7 @@ mod tests {
 
         let tue = get_today(&c, at(TUE)).unwrap();
         assert!(tue.pending.is_empty());
-        let mon_history = history_day(&c, "2026-10-05").unwrap();
+        let mon_history = history_day(&c, "2026-10-12").unwrap();
         assert_eq!(mon_history.len(), 1);
         assert_eq!(mon_history[0].completed_at, None);
         assert!(list_routines(&c, at(TUE)).unwrap().is_empty());
@@ -237,7 +270,7 @@ mod tests {
 
         archive_routine(&c, a, at(TUE)).unwrap();
         assert!(get_today(&c, at(TUE)).unwrap().pending.is_empty());
-        assert_eq!(titles(&history_day(&c, "2026-10-05").unwrap()), vec!["출결 확인"]);
+        assert_eq!(titles(&history_day(&c, "2026-10-12").unwrap()), vec!["출결 확인"]);
         assert!(list_routines(&c, at(TUE)).unwrap().is_empty());
     }
 
@@ -245,15 +278,60 @@ mod tests {
     fn weekend_hides_recurring_but_keeps_once() {
         let c = open_in_memory().unwrap();
         create_routine(&c, input_daily("출결 확인"), at(SAT)).unwrap();
-        create_routine(&c, input_once("주말 정리", "2026-10-10"), at(SAT)).unwrap();
+        create_routine(&c, input_once("주말 정리", "2026-10-17"), at(SAT)).unwrap();
         let v = get_today(&c, at(SAT)).unwrap();
-        assert!(v.weekend_hidden);
+        assert_eq!(v.rest.as_ref().map(|r| r.kind), Some(RestKind::Weekend));
         assert_eq!(titles(&v.pending), vec!["주말 정리"]);
 
         set_setting(&c, "hide_weekends", "false", at(SAT)).unwrap();
         let v = get_today(&c, at(SAT)).unwrap();
-        assert!(!v.weekend_hidden);
+        assert_eq!(v.rest, None);
         assert_eq!(titles(&v.pending), vec!["출결 확인", "주말 정리"]);
+    }
+
+    const HANGUL_DAY: &str = "2026-10-09 09:00"; // 금요일, 한글날
+
+    #[test]
+    fn holidays_hide_recurring_routines_unless_turned_off() {
+        let c = open_in_memory().unwrap();
+        create_routine(&c, input_daily("출결 확인"), at(HANGUL_DAY)).unwrap();
+        create_routine(&c, input_once("학급 게시판 정리", "2026-10-09"), at(HANGUL_DAY)).unwrap();
+        let v = get_today(&c, at(HANGUL_DAY)).unwrap();
+        assert_eq!(v.rest.as_ref().map(|r| (r.kind, r.name.as_str())), Some((RestKind::Holiday, "한글날")));
+        assert_eq!(titles(&v.pending), vec!["학급 게시판 정리"]);
+
+        set_setting(&c, "hide_holidays", "false", at(HANGUL_DAY)).unwrap();
+        let v = get_today(&c, at(HANGUL_DAY)).unwrap();
+        assert_eq!(v.rest, None);
+        assert_eq!(titles(&v.pending), vec!["출결 확인", "학급 게시판 정리"]);
+    }
+
+    #[test]
+    fn vacation_pauses_recurring_routines_and_clears_again() {
+        let c = open_in_memory().unwrap();
+        create_routine(&c, input_daily("출결 확인"), at(TUE)).unwrap();
+        let s = set_vacation(&c, Some("2026-10-13"), Some("2026-10-14"), at(TUE)).unwrap();
+        assert_eq!((s.vacation_start.as_deref(), s.vacation_end.as_deref()), (Some("2026-10-13"), Some("2026-10-14")));
+        let v = get_today(&c, at(TUE)).unwrap();
+        assert_eq!(v.rest.as_ref().map(|r| r.kind), Some(RestKind::Vacation));
+        assert!(v.pending.is_empty());
+
+        // 방학이 끝난 다음 날에는 다시 보인다
+        assert_eq!(titles(&get_today(&c, at("2026-10-15 09:00")).unwrap().pending), vec!["출결 확인"]);
+
+        let s = set_vacation(&c, None, None, at(TUE)).unwrap();
+        assert_eq!((s.vacation_start, s.vacation_end), (None, None));
+        assert_eq!(titles(&get_today(&c, at(TUE)).unwrap().pending), vec!["출결 확인"]);
+    }
+
+    #[test]
+    fn vacation_needs_both_dates_in_order() {
+        let c = open_in_memory().unwrap();
+        assert!(set_vacation(&c, Some("2026-10-14"), Some("2026-10-13"), at(TUE)).is_err());
+        assert!(set_vacation(&c, Some("2026-10-13"), None, at(TUE)).is_err());
+        assert!(set_vacation(&c, Some("2026/10/06"), Some("2026-10-14"), at(TUE)).is_err());
+        let s = settings::load(&c).unwrap();
+        assert_eq!((s.vacation_start, s.vacation_end), (None, None));
     }
 
     #[test]
@@ -278,8 +356,8 @@ mod tests {
         assert_eq!(
             m,
             vec![
-                DaySummary { day: "2026-10-05".into(), total: 2, completed: 1 },
-                DaySummary { day: "2026-10-06".into(), total: 2, completed: 0 },
+                DaySummary { day: "2026-10-12".into(), total: 2, completed: 1 },
+                DaySummary { day: "2026-10-13".into(), total: 2, completed: 0 },
             ]
         );
         assert!(history_month(&c, 2026, 13).is_err());
@@ -306,7 +384,7 @@ mod tests {
         assert!(err.unwrap_err().to_string().contains("날짜가 바뀌었어요"));
 
         // MON history should still show incomplete
-        let mon_history = history_day(&c, "2026-10-05").unwrap();
+        let mon_history = history_day(&c, "2026-10-12").unwrap();
         assert_eq!(mon_history[0].completed_at, None);
     }
 
@@ -324,7 +402,7 @@ mod tests {
         assert!(err.is_err());
 
         // MON history should still show completed
-        let mon_history = history_day(&c, "2026-10-05").unwrap();
+        let mon_history = history_day(&c, "2026-10-12").unwrap();
         assert!(mon_history[0].completed_at.is_some());
     }
 
@@ -343,15 +421,15 @@ mod tests {
         create_routine(&c, due, at(MON)).unwrap();
         create_routine(&c, input_daily("수업 준비"), at(MON)).unwrap();
 
-        let before = get_today(&c, at("2026-10-05 08:59")).unwrap();
+        let before = get_today(&c, at("2026-10-12 08:59")).unwrap();
         assert!(before.pending.iter().all(|i| !i.overdue));
 
-        let after = get_today(&c, at("2026-10-05 09:00")).unwrap();
+        let after = get_today(&c, at("2026-10-12 09:00")).unwrap();
         let flags: Vec<(&str, bool)> = after.pending.iter().map(|i| (i.title.as_str(), i.overdue)).collect();
         assert_eq!(flags, vec![("출결 확인", true), ("수업 준비", false)]);
 
-        set_done(&c, after.pending[0].id, true, at("2026-10-05 09:05")).unwrap();
-        let done = get_today(&c, at("2026-10-05 09:10")).unwrap();
+        set_done(&c, after.pending[0].id, true, at("2026-10-12 09:05")).unwrap();
+        let done = get_today(&c, at("2026-10-12 09:10")).unwrap();
         assert!(done.done.iter().all(|i| !i.overdue));
     }
 
@@ -361,7 +439,7 @@ mod tests {
         create_routine(&c, RoutineInput { due_time: Some("09:00".into()), ..input_daily("출결 확인") }, at(MON)).unwrap();
         create_routine(&c, RoutineInput { due_time: Some("15:00".into()), ..input_daily("공문 확인") }, at(MON)).unwrap();
         get_today(&c, at(MON)).unwrap();
-        let titles: Vec<String> = overdue_items(&c, at("2026-10-05 10:00")).unwrap().into_iter().map(|i| i.title).collect();
+        let titles: Vec<String> = overdue_items(&c, at("2026-10-12 10:00")).unwrap().into_iter().map(|i| i.title).collect();
         assert_eq!(titles, vec!["출결 확인".to_string()]);
     }
 }

@@ -132,6 +132,19 @@ pub fn set_setting(app: AppHandle, state: State<'_, AppState>, key: String, valu
     Ok(s)
 }
 
+/// 방학 · 쉬는 기간 설정. 시작일과 끝나는 날을 함께 주거나, 둘 다 비워서 해제한다.
+#[tauri::command]
+pub fn set_vacation(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    start: Option<String>,
+    end: Option<String>,
+) -> AppResult<Settings> {
+    let s = state.with_conn(|c| service::set_vacation(c, start.as_deref(), end.as_deref(), now()))?;
+    changed(&app);
+    Ok(s)
+}
+
 #[tauri::command]
 pub fn open_link(app: AppHandle, state: State<'_, AppState>, routine_id: i64) -> AppResult<()> {
     let routine = state.with_conn(|c| routines::get(c, routine_id))?;

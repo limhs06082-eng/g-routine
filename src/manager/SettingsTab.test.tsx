@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { AppStatus, Settings } from "@/lib/api";
 
@@ -10,6 +10,7 @@ const apiMock = vi.hoisted(() => ({
   changeDataDir: vi.fn(),
   exportBackup: vi.fn(),
   importBackup: vi.fn(),
+  setVacation: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => ({
@@ -19,7 +20,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 
 import { SettingsTab } from "./SettingsTab";
 
-const settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true };
+const settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, vacationStart: null, vacationEnd: null };
 const status: AppStatus = {
   ready: true,
   corrupt: false,
@@ -94,4 +95,39 @@ test("the due alert switch turns alerts off", async () => {
   expect(toggle).toBeChecked();
   await userEvent.click(toggle);
   expect(onChange).toHaveBeenCalledWith("due_alerts", "false");
+});
+
+test("the holiday switch turns holiday hiding off", async () => {
+  const onChange = vi.fn().mockResolvedValue(settings);
+  render(<SettingsTab settings={settings} status={status} onChange={onChange} />);
+  await userEvent.click(screen.getByRole("switch", { name: "공휴일에는 숨기기" }));
+  expect(onChange).toHaveBeenCalledWith("hide_holidays", "false");
+});
+
+test("saving a vacation sends both dates", async () => {
+  apiMock.setVacation.mockResolvedValue({ ...settings, vacationStart: "2026-12-24", vacationEnd: "2027-02-28" });
+  render(<SettingsTab settings={settings} status={status} onChange={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText("방학 시작일"), { target: { value: "2026-12-24" } });
+  fireEvent.change(screen.getByLabelText("방학 끝나는 날"), { target: { value: "2027-02-28" } });
+  await userEvent.click(screen.getByRole("button", { name: "방학 저장" }));
+  expect(apiMock.setVacation).toHaveBeenCalledWith("2026-12-24", "2027-02-28");
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("방학 기간을 저장했어요"));
+});
+
+test("a vacation ending before it starts is rejected before saving", async () => {
+  render(<SettingsTab settings={settings} status={status} onChange={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText("방학 시작일"), { target: { value: "2026-12-24" } });
+  fireEvent.change(screen.getByLabelText("방학 끝나는 날"), { target: { value: "2026-12-01" } });
+  await userEvent.click(screen.getByRole("button", { name: "방학 저장" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("시작일이 끝나는 날보다 늦어요");
+  expect(apiMock.setVacation).not.toHaveBeenCalled();
+});
+
+test("an active vacation can be cleared", async () => {
+  apiMock.setVacation.mockResolvedValue(settings);
+  const onVacation = { ...settings, vacationStart: "2026-12-24", vacationEnd: "2027-02-28" };
+  render(<SettingsTab settings={onVacation} status={status} onChange={vi.fn()} />);
+  expect(screen.getByText("12월 24일 ~ 2월 28일 동안 반복 루틴을 쉬어요")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "방학 해제" }));
+  expect(apiMock.setVacation).toHaveBeenCalledWith(null, null);
 });

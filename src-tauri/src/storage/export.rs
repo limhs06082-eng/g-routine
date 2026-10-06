@@ -187,12 +187,12 @@ mod tests {
     #[test]
     fn export_then_import_round_trips_into_fresh_db() {
         let src = open_in_memory().unwrap();
-        service::create_routine(&src, input_daily("출결 확인"), at("2026-10-05 09:00")).unwrap();
-        let v = service::get_today(&src, at("2026-10-05 09:00")).unwrap();
-        service::set_done(&src, v.pending[0].id, true, at("2026-10-05 09:10")).unwrap();
+        service::create_routine(&src, input_daily("출결 확인"), at("2026-10-12 09:00")).unwrap();
+        let v = service::get_today(&src, at("2026-10-12 09:00")).unwrap();
+        service::set_done(&src, v.pending[0].id, true, at("2026-10-12 09:10")).unwrap();
         settings::apply(&src, "theme", "mint").unwrap();
         settings::set_window_pos(&src, 10, 10).unwrap();
-        let backup = export(&src, "2026-10-05T10:00:00").unwrap();
+        let backup = export(&src, "2026-10-12T10:00:00").unwrap();
         assert_eq!(backup.settings, vec![("theme".to_string(), "mint".to_string())]);
 
         let t = tempfile::tempdir().unwrap();
@@ -200,12 +200,12 @@ mod tests {
         write_file(&path, &backup).unwrap();
 
         let dst = open_in_memory().unwrap();
-        service::create_routine(&dst, input_daily("지워질 루틴"), at("2026-10-05 09:00")).unwrap();
+        service::create_routine(&dst, input_daily("지워질 루틴"), at("2026-10-12 09:00")).unwrap();
         import(&dst, &read_file(&path).unwrap()).unwrap();
-        let history = service::history_day(&dst, "2026-10-05").unwrap();
+        let history = service::history_day(&dst, "2026-10-12").unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].title, "출결 확인");
-        assert_eq!(history[0].completed_at.as_deref(), Some("2026-10-05T09:10:00"));
+        assert_eq!(history[0].completed_at.as_deref(), Some("2026-10-12T09:10:00"));
         assert_eq!(settings::load(&dst).unwrap().theme, "mint");
     }
 
@@ -229,7 +229,7 @@ mod tests {
         let backup = BackupFile {
             app: APP.into(),
             version: VERSION,
-            exported_at: "2026-10-05T10:00:00".into(),
+            exported_at: "2026-10-12T10:00:00".into(),
             routines: vec![],
             day_items: vec![],
             settings: vec![
@@ -255,7 +255,7 @@ mod tests {
         let backup = BackupFile {
             app: APP.into(),
             version: VERSION,
-            exported_at: "2026-10-05T10:00:00".into(),
+            exported_at: "2026-10-12T10:00:00".into(),
             routines: vec![Routine {
                 id: 1,
                 title: "test".into(),
@@ -265,7 +265,7 @@ mod tests {
                 due_time: None,
                 link: None,
                 sort_order: 0,
-                created_at: "2026-10-05T00:00:00".into(),
+                created_at: "2026-10-12T00:00:00".into(),
                 archived_at: None,
             }],
             day_items: vec![],
@@ -276,7 +276,7 @@ mod tests {
 
         // Verify destination data is unchanged
         let dst = open_in_memory().unwrap();
-        service::create_routine(&dst, input_daily("original"), at("2026-10-05 09:00")).unwrap();
+        service::create_routine(&dst, input_daily("original"), at("2026-10-12 09:00")).unwrap();
         let before = dst.query_row("SELECT COUNT(*) FROM routines", [], |r| r.get::<_, i64>(0)).unwrap();
         let _ = import(&dst, &backup);
         let after = dst.query_row("SELECT COUNT(*) FROM routines", [], |r| r.get::<_, i64>(0)).unwrap();
@@ -286,8 +286,8 @@ mod tests {
     #[test]
     fn reads_backup_with_utf8_bom() {
         let src = open_in_memory().unwrap();
-        service::create_routine(&src, input_daily("출결 확인"), at("2026-10-05 09:00")).unwrap();
-        let backup = export(&src, "2026-10-05T10:00:00").unwrap();
+        service::create_routine(&src, input_daily("출결 확인"), at("2026-10-12 09:00")).unwrap();
+        let backup = export(&src, "2026-10-12T10:00:00").unwrap();
         let t = tempfile::tempdir().unwrap();
         let path = t.path().join("bom.json");
         let mut bytes = "\u{feff}".as_bytes().to_vec();

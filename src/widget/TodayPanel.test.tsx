@@ -36,7 +36,7 @@ const item = (id: number, title: string, extra: Partial<DayItem> = {}): DayItem 
 
 const view: TodayView = {
   day: "2026-10-05",
-  weekendHidden: false,
+  rest: null,
   pending: [item(1, "출결 확인", { hasLink: true, dueTime: "09:00" }), item(2, "가정통신문 회수", { repeatType: "once" })],
   done: [],
 };
@@ -157,4 +157,14 @@ test("an item past its due time shows a red due chip", async () => {
   expect(late).toHaveTextContent("09:00");
   expect(late.className).toMatch(/text-danger/);
   expect(screen.getByText("15:00").className).not.toMatch(/text-danger/);
+});
+
+test.each([
+  [{ kind: "holiday", name: "한글날" }, "오늘은 한글날이에요. 푹 쉬세요"],
+  [{ kind: "vacation", name: "방학" }, "방학 중이에요. 푹 쉬세요"],
+  [{ kind: "weekend", name: "주말" }, "좋은 주말 보내세요"],
+] as const)("a rest day with nothing to do says why (%o)", async (rest, message) => {
+  apiMock.today.mockResolvedValue({ ...view, rest, pending: [], done: [] });
+  renderPanel();
+  expect(await screen.findByText(message)).toBeInTheDocument();
 });

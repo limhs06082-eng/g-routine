@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type RepeatType = "daily" | "weekdays" | "once";
 export type ThemeName = "lavender" | "mint" | "peach" | "sky" | "lemon";
-export type SettingKey = "always_on_top" | "autostart" | "hide_weekends" | "day_start_hour" | "theme" | "due_alerts";
+export type SettingKey = "always_on_top" | "autostart" | "hide_weekends" | "day_start_hour" | "theme" | "due_alerts" | "hide_holidays";
 export type TemplateName = "homeroom" | "subject" | "empty";
 
 export interface Routine {
@@ -41,9 +41,16 @@ export interface DayItem {
   overdue: boolean;
 }
 
+export interface Rest {
+  kind: "weekend" | "holiday" | "vacation";
+  /** 화면에 보일 이름 (예: "추석", "방학", "주말") */
+  name: string;
+}
+
 export interface TodayView {
   day: string;
-  weekendHidden: boolean;
+  /** 오늘이 쉬는 날(공휴일·방학·주말)이면 그 이유. 쉬는 날에는 반복 루틴이 숨겨진다 */
+  rest: Rest | null;
   pending: DayItem[];
   done: DayItem[];
 }
@@ -61,6 +68,10 @@ export interface Settings {
   dayStartHour: number;
   theme: ThemeName;
   dueAlerts: boolean;
+  hideHolidays: boolean;
+  /** 방학 · 쉬는 기간 (YYYY-MM-DD, 둘 다 있거나 둘 다 없다) */
+  vacationStart: string | null;
+  vacationEnd: string | null;
 }
 
 export interface AppStatus {
@@ -98,6 +109,8 @@ export const api = {
   historyDay: (day: string) => invoke<DayItem[]>("history_day", { day }),
   settings: () => invoke<Settings>("get_settings"),
   setSetting: (key: SettingKey, value: string) => invoke<Settings>("set_setting", { key, value }),
+  /** 방학 기간을 정하거나(시작일·끝나는 날) 둘 다 null로 해제한다 */
+  setVacation: (start: string | null, end: string | null) => invoke<Settings>("set_vacation", { start, end }),
   openLink: (routineId: number) => invoke<void>("open_link", { routineId }),
   exportBackup: (path: string) => invoke<void>("export_backup", { path }),
   importBackup: (path: string) => invoke<void>("import_backup", { path }),

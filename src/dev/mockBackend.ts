@@ -35,7 +35,7 @@ const routines: Routine[] = [
   routine(7, "가정통신문 회수", { repeatType: "once", onceDate: TODAY }),
 ];
 const doneAt = new Map<number, string>([[2, `${TODAY}T08:55:00`]]);
-let settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true };
+let settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, vacationStart: null, vacationEnd: null };
 let ready = new URLSearchParams(window.location.search).get("setup") !== "1";
 const DATA_DIR = "D:\\G-routine\\data";
 
@@ -74,7 +74,7 @@ function today(): TodayView {
     .map((r) => toItem(r, TODAY, doneAt.get(r.id) ?? null));
   return {
     day: TODAY,
-    weekendHidden: false,
+    rest: null,
     pending: items.filter((i) => !i.completedAt),
     done: items.filter((i) => i.completedAt),
   };
@@ -130,6 +130,7 @@ const KEY_MAP: Record<string, keyof Settings> = {
   day_start_hour: "dayStartHour",
   theme: "theme",
   due_alerts: "dueAlerts",
+  hide_holidays: "hideHolidays",
 };
 
 export function installMockBackend() {
@@ -208,6 +209,10 @@ export function installMockBackend() {
         changed();
         return settings;
       }
+      case "set_vacation":
+        settings = { ...settings, vacationStart: (args.start as string | null) ?? null, vacationEnd: (args.end as string | null) ?? null };
+        changed();
+        return settings;
       case "open_link":
         console.info("[mock] open_link", args.routineId);
         return null;

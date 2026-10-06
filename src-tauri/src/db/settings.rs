@@ -1,10 +1,11 @@
 use rusqlite::{params, Connection, OptionalExtension};
 
+use crate::domain::day::parse_day;
 use crate::error::{AppError, AppResult};
 use crate::model::Settings;
 
 pub const THEMES: [&str; 5] = ["lavender", "mint", "peach", "sky", "lemon"];
-const BOOL_KEYS: [&str; 4] = ["always_on_top", "autostart", "hide_weekends", "due_alerts"];
+const BOOL_KEYS: [&str; 5] = ["always_on_top", "autostart", "hide_weekends", "due_alerts", "hide_holidays"];
 
 pub fn get(c: &Connection, key: &str) -> AppResult<Option<String>> {
     Ok(c.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0)).optional()?)
@@ -34,6 +35,9 @@ pub fn load(c: &Connection) -> AppResult<Settings> {
         autostart: get_bool(c, "autostart", true)?,
         hide_weekends: get_bool(c, "hide_weekends", true)?,
         due_alerts: get_bool(c, "due_alerts", true)?,
+        hide_holidays: get_bool(c, "hide_holidays", true)?,
+        vacation_start: get(c, "vacation_start")?.filter(|d| parse_day(d).is_some()),
+        vacation_end: get(c, "vacation_end")?.filter(|d| parse_day(d).is_some()),
         day_start_hour: get(c, "day_start_hour")?
             .and_then(|v| v.parse::<u32>().ok())
             .filter(|h| *h < 24)
@@ -85,6 +89,22 @@ pub fn set_window_pos(c: &Connection, x: i32, y: i32) -> AppResult<()> {
     Ok(())
 }
 
+/// 방학 기간을 함께 저장하거나(Some) 함께 지운다(None). 검증은 호출하는 쪽(service)이 한다.
+pub fn set_vacation(c: &Connection, range: Option<(&str, &str)>) -> AppResult<()> {
+    let tx = c.unchecked_transaction()?;
+    match range {
+        Some((start, end)) => {
+            set(&tx, "vacation_start", start)?;
+            set(&tx, "vacation_end", end)?;
+        }
+        None => {
+            tx.execute("DELETE FROM settings WHERE key IN ('vacation_start', 'vacation_end')", [])?;
+        }
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 pub fn clear_window_pos(c: &Connection) -> AppResult<()> {
     let tx = c.unchecked_transaction()?;
     tx.execute("DELETE FROM settings WHERE key = ?1", ["window_x"])?;
@@ -111,6 +131,9 @@ mod tests {
                 day_start_hour: 4,
                 theme: "lavender".into(),
                 due_alerts: true,
+                hide_holidays: true,
+                vacation_start: None,
+                vacation_end: None,
             }
         );
     }

@@ -187,7 +187,7 @@ mod tests {
     use crate::service;
     use crate::test_util::at;
 
-    const NOW: &str = "2026-10-05 09:00";
+    const NOW: &str = "2026-10-12 09:00";
 
     fn state_in(root: &Path) -> AppState {
         AppState::new(root.join("cfg").join("location.json"), root.join("app"))
@@ -224,7 +224,7 @@ mod tests {
         assert_eq!(st.data_dir, Some(data.display().to_string()));
         let v = state.with_conn(|c| service::get_today(c, at(NOW))).unwrap();
         assert_eq!(v.pending.len(), 5); // 금요일 전용 1개 제외
-        assert!(data.join("backups").join("g-routine-2026-10-05.db").is_file());
+        assert!(data.join("backups").join("g-routine-2026-10-12.db").is_file());
 
         drop(state);
         let again = state_in(t.path());
@@ -384,7 +384,7 @@ mod tests {
         change_dir(&s, &b, at(NOW)).unwrap();
         assert!(b.join(DB_FILE).is_file());
         assert!(!b.join(format!("{DB_FILE}.tmp")).exists());
-        assert!(b.join("backups").join("g-routine-2026-10-05.db").is_file());
+        assert!(b.join("backups").join("g-routine-2026-10-12.db").is_file());
         assert_eq!(s.status().data_dir, Some(b.display().to_string()));
         assert_eq!(location::read_location(&s.location_file), Some(b));
         assert_eq!(routine_count(&s), 4);
@@ -411,7 +411,7 @@ mod tests {
             setup(&s, &data, "subject", at(NOW)).unwrap();
         }
         // 예전 버전의 복구가 손상 파일을 옮긴 직후 끊긴 상태
-        let backup = data.join("backups").join("g-routine-2026-10-05.db");
+        let backup = data.join("backups").join("g-routine-2026-10-12.db");
         fs::rename(data.join(DB_FILE), data.join(format!("{DB_FILE}.corrupt-20261005-090000"))).unwrap();
         fs::copy(&backup, crate::storage::backup::restore_tmp_path(&data)).unwrap();
 

@@ -64,6 +64,7 @@ pub fn run() {
             commands::history_day,
             commands::get_settings,
             commands::set_setting,
+            commands::set_vacation,
             commands::open_link,
             commands::export_backup,
             commands::import_backup,

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { ChevronDown, ChevronUp, Coffee, PartyPopper } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { api, errorMessage, type DayItem, type TodayView } from "@/lib/api";
+import { api, errorMessage, type DayItem, type Rest, type TodayView } from "@/lib/api";
 import { useData } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { DoneRow } from "./DoneRow";
@@ -15,6 +15,12 @@ import { formatDayLabel, localTimestamp, markDone, markPending, progress } from 
 const LEAVE_MS = 220;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+function restMessage(rest: Rest): string {
+  if (rest.kind === "holiday") return `오늘은 ${rest.name}이에요. 푹 쉬세요`;
+  if (rest.kind === "vacation") return "방학 중이에요. 푹 쉬세요";
+  return "좋은 주말 보내세요";
+}
+
 function EmptyState({ view, total }: { view: TodayView; total: number }) {
   if (total > 0) {
     return (
@@ -24,11 +30,11 @@ function EmptyState({ view, total }: { view: TodayView; total: number }) {
       </div>
     );
   }
-  if (view.weekendHidden) {
+  if (view.rest) {
     return (
       <div className="flex flex-col items-center gap-1 px-4 py-5 text-center text-xs text-muted-foreground">
         <Coffee className="size-5 text-primary" />
-        <span className="font-medium text-foreground">좋은 주말 보내세요</span>
+        <span className="font-medium text-foreground">{restMessage(view.rest)}</span>
       </div>
     );
   }

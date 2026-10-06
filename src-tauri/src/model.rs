@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::domain::rest::Rest;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RepeatType {
@@ -74,7 +76,8 @@ pub struct DayItem {
 #[serde(rename_all = "camelCase")]
 pub struct TodayView {
     pub day: String,
-    pub weekend_hidden: bool,
+    /// 오늘이 쉬는 날(공휴일·방학·주말)이면 그 이유. 쉬는 날에는 반복 루틴이 숨겨진다.
+    pub rest: Option<Rest>,
     pub pending: Vec<DayItem>,
     pub done: Vec<DayItem>,
 }
@@ -97,4 +100,9 @@ pub struct Settings {
     pub theme: String,
     /// 마감 시각이 지난 할 일을 Windows 알림으로 알려 줄지
     pub due_alerts: bool,
+    /// 공휴일(대체공휴일 포함)에는 반복 루틴을 숨길지
+    pub hide_holidays: bool,
+    /// 방학 · 쉬는 기간 (YYYY-MM-DD, 둘 다 있거나 둘 다 없다)
+    pub vacation_start: Option<String>,
+    pub vacation_end: Option<String>,
 }

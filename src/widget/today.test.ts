@@ -15,7 +15,7 @@ const item = (id: number, title: string, extra: Partial<DayItem> = {}): DayItem 
   ...extra,
 });
 
-const view: TodayView = { day: "2026-10-05", weekendHidden: false, pending: [item(1, "A"), item(2, "B")], done: [] };
+const view: TodayView = { day: "2026-10-05", rest: null, pending: [item(1, "A"), item(2, "B")], done: [] };
 
 test("formats Korean day label", () => {
   expect(formatDayLabel("2026-10-05")).toBe("10월 5일 월요일");

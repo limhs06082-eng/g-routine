@@ -8,6 +8,7 @@ import { api, errorMessage, type AppStatus, type SettingKey, type Settings, type
 import { cn } from "@/lib/utils";
 import { formatHour } from "./calendar";
 import { todayString } from "./routines";
+import { VacationSetting } from "./VacationSetting";
 
 const THEMES: { value: ThemeName; label: string; color: string }[] = [
   { value: "lavender", label: "라벤더", color: "#AFA9EC" },
@@ -107,6 +108,10 @@ export function SettingsTab({ settings, status, onChange }: Props) {
       <Row label="주말에는 숨기기" hint="토 · 일에는 반복 루틴을 띄우지 않아요">
         <Switch aria-label="주말에는 숨기기" checked={settings.hideWeekends} onCheckedChange={toggle("hide_weekends")} />
       </Row>
+      <Row label="공휴일에는 숨기기" hint="설날 · 추석 · 대체공휴일 등 (2027년까지 들어 있어요)">
+        <Switch aria-label="공휴일에는 숨기기" checked={settings.hideHolidays} onCheckedChange={toggle("hide_holidays")} />
+      </Row>
+      <VacationSetting settings={settings} run={run} />
       <Row label="마감 시각 알림" hint="마감 시각이 지나도 끝내지 않은 할 일을 Windows 알림으로 한 번 알려 줘요">
         <Switch aria-label="마감 시각 알림" checked={settings.dueAlerts} onCheckedChange={toggle("due_alerts")} />
       </Row>
