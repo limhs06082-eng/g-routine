@@ -114,7 +114,7 @@ export function SettingsTab({ settings, status, onChange }: Props) {
           onChange={(e) => void run(() => onChange("day_start_hour", e.target.value))}
           className="h-8 rounded-lg border border-input bg-background px-2 text-sm"
         >
-          {Array.from({ length: 13 }, (_, h) => (
+          {Array.from({ length: 24 }, (_, h) => (
             <option key={h} value={h}>
               {formatHour(h)}
             </option>

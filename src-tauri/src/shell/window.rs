@@ -210,4 +210,15 @@ mod tests {
         assert!(BROWSER_ARGS.contains("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"));
         assert!(BROWSER_ARGS.contains("--disable-gpu"));
     }
+
+    #[test]
+    fn release_build_has_a_strict_content_security_policy() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../../tauri.conf.json")).unwrap();
+        let csp = conf["app"]["security"]["csp"].as_str().expect("csp must be set");
+        assert!(csp.contains("default-src 'self';"));
+        assert!(csp.contains("connect-src ipc: http://ipc.localhost"));
+        assert!(!csp.contains("unsafe-eval"));
+        // 외부(원격) 출처는 허용하지 않는다
+        assert!(!csp.contains("https:"));
+    }
 }

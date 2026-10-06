@@ -27,6 +27,10 @@ pub fn run_daily_backup(c: &Connection, dir: &Path, now: NaiveDateTime) -> AppRe
 
 fn mark_ready(state: &AppState, dir: &Path, conn: Connection) {
     state.replace_conn(Some(conn));
+    set_ready_status(state, dir);
+}
+
+fn set_ready_status(state: &AppState, dir: &Path) {
     state.update_status(|s| {
         s.ready = true;
         s.corrupt = false;
@@ -152,24 +156,27 @@ pub fn change_dir(state: &AppState, chosen: &Path, now: NaiveDateTime) -> AppRes
     }
     fs::create_dir_all(new_dir)?;
     let target = new_dir.join(DB_FILE);
-    if !target.is_file() {
-        let temp = new_dir.join(format!("{DB_FILE}.tmp"));
-        let _ = fs::remove_file(&temp);
-        let copied = state
-            .with_conn(|c| {
-                c.execute("VACUUM INTO ?1", [temp.to_string_lossy().to_string()])?;
-                Ok(())
-            })
-            .and_then(|_| fs::rename(&temp, &target).map_err(AppError::from));
-        if let Err(e) = copied {
+    // 복사부터 연결 교체까지 한 번의 잠금 안에서 처리한다.
+    // 그 사이에 누른 체크는 잠금이 풀린 뒤 새 DB에 쓰이므로 옛 폴더에만 남지 않는다.
+    state.swap_conn(|current| {
+        if !target.is_file() {
+            let temp = new_dir.join(format!("{DB_FILE}.tmp"));
             let _ = fs::remove_file(&temp);
-            return Err(e);
+            let copied = current
+                .execute("VACUUM INTO ?1", [temp.to_string_lossy().to_string()])
+                .map_err(AppError::from)
+                .and_then(|_| fs::rename(&temp, &target).map_err(AppError::from));
+            if let Err(e) = copied {
+                let _ = fs::remove_file(&temp);
+                return Err(e);
+            }
         }
-    }
-    let conn = open_checked(new_dir)?;
-    location::write_location(&state.location_file, new_dir)?;
-    let _ = run_daily_backup(&conn, new_dir, now);
-    mark_ready(state, new_dir, conn);
+        let conn = open_checked(new_dir)?;
+        location::write_location(&state.location_file, new_dir)?;
+        let _ = run_daily_backup(&conn, new_dir, now);
+        Ok(conn)
+    })?;
+    set_ready_status(state, new_dir);
     Ok(())
 }
 

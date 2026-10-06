@@ -51,6 +51,17 @@ impl AppState {
         }
     }
 
+    /// 연결 잠금을 쥔 채로 지금 연결을 넘겨 새 연결을 만들고 바꾼다.
+    /// 그동안 다른 명령은 기다리므로, 중간에 누른 체크가 옛 연결에만 쓰이고 사라지는 일이 없다.
+    /// f가 실패하면 기존 연결을 그대로 둔다.
+    pub fn swap_conn(&self, f: impl FnOnce(&Connection) -> AppResult<Connection>) -> AppResult<()> {
+        let mut guard = self.conn.lock().map_err(|_| AppError::invalid("내부 상태를 읽지 못했어요"))?;
+        let current = guard.as_ref().ok_or(AppError::NotReady)?;
+        let next = f(current)?;
+        *guard = Some(next);
+        Ok(())
+    }
+
     pub fn replace_conn(&self, conn: Option<Connection>) {
         if let Ok(mut g) = self.conn.lock() {
             *g = conn;
@@ -69,5 +80,47 @@ impl AppState {
 
     pub fn data_dir(&self) -> Option<PathBuf> {
         self.status().data_dir.map(PathBuf::from)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::open_in_memory;
+
+    fn marker(c: &Connection) -> String {
+        c.query_row("SELECT value FROM settings WHERE key = 'marker'", [], |r| r.get(0)).unwrap()
+    }
+
+    fn conn_with_marker(m: &str) -> Connection {
+        let c = open_in_memory().unwrap();
+        c.execute("INSERT INTO settings (key, value) VALUES ('marker', ?1)", [m]).unwrap();
+        c
+    }
+
+    #[test]
+    fn swap_conn_replaces_the_connection_while_holding_the_lock() {
+        let s = AppState::new(PathBuf::from("loc.json"), PathBuf::from("exe"));
+        s.replace_conn(Some(conn_with_marker("old")));
+        s.swap_conn(|old| {
+            assert_eq!(marker(old), "old");
+            Ok(conn_with_marker("new"))
+        })
+        .unwrap();
+        assert_eq!(s.with_conn(|c| Ok(marker(c))).unwrap(), "new");
+    }
+
+    #[test]
+    fn swap_conn_keeps_the_old_connection_when_it_fails() {
+        let s = AppState::new(PathBuf::from("loc.json"), PathBuf::from("exe"));
+        s.replace_conn(Some(conn_with_marker("old")));
+        assert!(s.swap_conn(|_| Err(AppError::invalid("실패"))).is_err());
+        assert_eq!(s.with_conn(|c| Ok(marker(c))).unwrap(), "old");
+    }
+
+    #[test]
+    fn swap_conn_requires_an_open_connection() {
+        let s = AppState::new(PathBuf::from("loc.json"), PathBuf::from("exe"));
+        assert!(matches!(s.swap_conn(|_| Ok(open_in_memory().unwrap())), Err(AppError::NotReady)));
     }
 }

@@ -77,3 +77,12 @@ test("confirming switches to the existing data", async () => {
   await waitFor(() => expect(apiMock.changeDataDir).toHaveBeenCalledWith("E:\\G-routine\\data"));
   await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("저장 위치를 바꿨어요"));
 });
+
+test("day start hour offers every hour and keeps an afternoon value selected", () => {
+  render(<SettingsTab settings={{ ...settings, dayStartHour: 15 }} status={status} onChange={vi.fn()} />);
+  const select = screen.getByLabelText("하루 시작 시각") as HTMLSelectElement;
+  expect(select.options).toHaveLength(24);
+  expect(select.options[23]).toHaveTextContent("오후 11시");
+  expect(select.value).toBe("15");
+  expect(select.selectedOptions[0]).toHaveTextContent("오후 3시");
+});
