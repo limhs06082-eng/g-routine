@@ -1,6 +1,6 @@
 [package]
 name = "g-routine"
-version = "0.1.2"
+version = "0.2.0"
 description = "교사를 위한 매일 루틴 위젯"
 authors = ["Hansol"]
 edition = "2021"
