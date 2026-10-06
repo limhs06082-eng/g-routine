@@ -11,6 +11,10 @@ use crate::{now, startup, DATA_CHANGED};
 
 pub const WIDGET: &str = "widget";
 pub const MANAGER: &str = "manager";
+/// WebView2 실행 인자. GPU 프로세스를 끄면 메모리가 약 75MB 줄어든다(194MB → 119MB 실측).
+/// 이 값을 지정하면 Tauri 기본 인자가 사라지므로 기본값(--disable-features=…)을 함께 적는다.
+/// WebView2는 같은 데이터 폴더의 창끼리 인자가 같아야 하므로 tauri.conf.json 위젯 창과 반드시 같은 값을 쓴다.
+pub const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu";
 const MARGIN: f64 = 12.0;
 const MIN_HEIGHT: f64 = 100.0;
 
@@ -79,9 +83,10 @@ pub fn reset_position(app: &AppHandle) {
 
 /// 내용 높이(논리 px)에 맞춰 위젯 높이를 바꾸되 아래 모서리를 고정한다.
 /// 최대 높이는 위젯이 있는 모니터의 작업 영역 높이(여백 제외)다. 그보다 길 때만 화면 안에서 스크롤된다.
-pub fn resize_widget(app: &AppHandle, logical_height: f64) -> tauri::Result<()> {
-    let Some(w) = app.get_webview_window(WIDGET) else { return Ok(()) };
-    let Some(m) = w.current_monitor()?.or(w.primary_monitor()?) else { return Ok(()) };
+/// 반환값: 내용이 최대 높이를 넘었는지. true일 때만 화면 쪽에서 스크롤을 켠다.
+pub fn resize_widget(app: &AppHandle, logical_height: f64) -> tauri::Result<bool> {
+    let Some(w) = app.get_webview_window(WIDGET) else { return Ok(false) };
+    let Some(m) = w.current_monitor()?.or(w.primary_monitor()?) else { return Ok(false) };
     let scale = w.scale_factor()?;
     let pos = w.outer_position()?;
     let old = w.outer_size()?;
@@ -91,12 +96,14 @@ pub fn resize_widget(app: &AppHandle, logical_height: f64) -> tauri::Result<()> 
     let wanted = (logical_height * scale).round() as i32;
     let min_h = (MIN_HEIGHT * scale).round() as i32;
     let (y, new_h) = fit_height(pos.y, old.height as i32, wanted, min_h, work, margin);
+    let capped = wanted > new_h;
     if new_h == old.height as i32 && y == pos.y {
-        return Ok(());
+        return Ok(capped);
     }
     mark_programmatic_move(app);
     w.set_size(PhysicalSize::new(old.width, new_h as u32))?;
-    w.set_position(PhysicalPosition::new(pos.x, y))
+    w.set_position(PhysicalPosition::new(pos.x, y))?;
+    Ok(capped)
 }
 
 pub fn open_manager(app: &AppHandle) -> tauri::Result<()> {
@@ -111,6 +118,7 @@ pub fn open_manager(app: &AppHandle) -> tauri::Result<()> {
         .min_inner_size(640.0, 480.0)
         .center()
         .disable_drag_drop_handler()
+        .additional_browser_args(BROWSER_ARGS)
         .build()?;
     Ok(())
 }
@@ -174,4 +182,27 @@ pub fn spawn_day_watcher(app: AppHandle) {
             std::thread::sleep(Duration::from_secs(30));
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BROWSER_ARGS;
+
+    #[test]
+    fn widget_and_manager_share_browser_args() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../../tauri.conf.json")).unwrap();
+        let widget = conf["app"]["windows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|w| w["label"] == "widget")
+            .unwrap();
+        assert_eq!(widget["additionalBrowserArgs"].as_str(), Some(BROWSER_ARGS));
+    }
+
+    #[test]
+    fn browser_args_keep_tauri_defaults_and_disable_gpu() {
+        assert!(BROWSER_ARGS.contains("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"));
+        assert!(BROWSER_ARGS.contains("--disable-gpu"));
+    }
 }

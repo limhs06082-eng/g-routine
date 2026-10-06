@@ -100,7 +100,8 @@ export const api = {
   importBackup: (path: string) => invoke<void>("import_backup", { path }),
   changeDataDir: (dir: string) => invoke<void>("change_data_dir", { dir }),
   openManager: () => invoke<void>("open_manager"),
-  resizeWidget: (height: number) => invoke<void>("resize_widget", { height }),
+  /** 위젯 높이를 내용에 맞춘다. true면 화면 높이 상한에 걸려 스크롤이 필요하다. */
+  resizeWidget: (height: number) => invoke<boolean>("resize_widget", { height }),
   hideWidget: () => invoke<void>("hide_widget"),
 };
 

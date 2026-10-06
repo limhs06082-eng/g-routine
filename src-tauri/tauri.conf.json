@@ -27,7 +27,8 @@
         "alwaysOnTop": false,
         "visible": false,
         "focus": false,
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu"
       }
     ],
     "security": {

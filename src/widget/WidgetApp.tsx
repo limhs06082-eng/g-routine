@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { useAutoResize, useData, useSettings } from "@/lib/hooks";
+import { cn } from "@/lib/utils";
 import { Setup } from "./Setup";
 import { TodayPanel } from "./TodayPanel";
 
@@ -8,13 +9,13 @@ export function WidgetApp() {
   const { data: status, error, reload } = useData(api.status);
   const ready = status?.ready ?? false;
   const { settings, update } = useSettings(ready);
-  const ref = useAutoResize<HTMLDivElement>();
+  const { ref, capped } = useAutoResize<HTMLDivElement>();
   const pinned = settings?.alwaysOnTop ?? false;
 
-  // 바깥 div: 창 높이. 내용이 화면(작업 영역)보다 길 때만 스크롤된다.
+  // 바깥 div: 창 높이. 내용이 화면(작업 영역) 상한을 넘었을 때만 스크롤을 켠다.
   // 안쪽 div(ref): 내용의 실제 높이. 이 높이를 Rust에 알려 창을 늘리고 줄인다.
   return (
-    <div className="widget-scroll h-screen overflow-y-auto">
+    <div className={cn("widget-scroll h-screen", capped ? "overflow-y-auto" : "overflow-hidden")}>
       <div ref={ref} className="p-1.5">
         <div className="overflow-hidden rounded-xl border border-border bg-background shadow-[0_2px_10px_rgba(44,44,42,0.10)]">
           {!status ? (

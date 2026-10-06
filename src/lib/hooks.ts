@@ -66,9 +66,13 @@ export function useSettings(enabled: boolean) {
   return { settings: data, update };
 }
 
-/** 위젯 내용 높이를 Rust에 알려 창 높이를 맞춘다 (아래 모서리 고정). */
+/**
+ * 위젯 내용 높이를 Rust에 알려 창 높이를 맞춘다 (아래 모서리 고정).
+ * `capped`는 내용이 화면 높이 상한을 넘었다는 뜻이고, 이때만 스크롤을 켠다.
+ */
 export function useAutoResize<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
+  const [capped, setCapped] = useState(false);
   useEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -77,11 +81,14 @@ export function useAutoResize<T extends HTMLElement>() {
       const h = Math.ceil(el.getBoundingClientRect().height);
       if (h !== last) {
         last = h;
-        api.resizeWidget(h).catch(() => {});
+        api
+          .resizeWidget(h)
+          .then((c) => setCapped(Boolean(c)))
+          .catch(() => {});
       }
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  return ref;
+  return { ref, capped };
 }
