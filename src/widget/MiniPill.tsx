@@ -12,8 +12,8 @@ export function MiniPill({ view, onExpand }: { view: TodayView; onExpand: () => 
   const label = `크게 보기 · 오늘 할 일 ${total}개 중 ${done}개 완료${late > 0 ? ` · 마감 지난 일 ${late}개` : ""}`;
 
   return (
-    <div className="flex items-center rounded-full border border-border bg-background py-0.5 pr-0.5 pl-1 shadow-[0_2px_10px_rgba(44,44,42,0.10)]">
-      <span data-tauri-drag-region title="끌어서 옮기기" className="cursor-grab px-0.5 text-muted-foreground">
+    <div data-mini-pill className="flex items-center rounded-full border border-border bg-background py-0.5 pr-0.5 pl-1 shadow-[0_2px_10px_rgba(44,44,42,0.10)]">
+      <span data-tauri-drag-region title="끌어서 옮기기" className="cursor-grab self-stretch px-1.5 py-1 text-muted-foreground">
         <GripVertical className="pointer-events-none size-3.5" />
       </span>
       <button

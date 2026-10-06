@@ -135,7 +135,11 @@ export function SettingsTab({ settings, status, onChange }: Props) {
       <Row label="주말에는 숨기기" hint="토 · 일에는 반복 루틴을 띄우지 않아요">
         <Switch aria-label="주말에는 숨기기" checked={settings.hideWeekends} onCheckedChange={toggle("hide_weekends")} />
       </Row>
-      <Row label="공휴일에는 숨기기" hint={holidayHint(coverage)} warn={coverage !== null && coverage.state !== "ok"}>
+      <Row
+        label="공휴일에는 숨기기"
+        hint={settings.hideHolidays ? holidayHint(coverage) : "설날 · 추석 · 대체공휴일 등"}
+        warn={settings.hideHolidays && coverage !== null && coverage.state !== "ok"}
+      >
         <Switch aria-label="공휴일에는 숨기기" checked={settings.hideHolidays} onCheckedChange={toggle("hide_holidays")} />
       </Row>
       <VacationSetting settings={settings} run={run} />

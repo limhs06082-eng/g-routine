@@ -53,22 +53,30 @@ pub fn load(c: &Connection) -> AppResult<Settings> {
 /// '바뀐 점' 안내를 마지막으로 본 앱 버전. 새로 설치할 때는 그 버전을 적어 두어 안내를 띄우지 않는다.
 pub const SEEN_VERSION: &str = "seen_version";
 
-/// 0.3.0 같은 버전 문자열인지
-fn is_version(v: &str) -> bool {
+/// 0.3.0 같은 버전 문자열이면 (주, 부, 수) 숫자로
+fn version_parts(v: &str) -> Option<(u32, u32, u32)> {
     let parts: Vec<&str> = v.split('.').collect();
-    parts.len() == 3 && parts.iter().all(|p| !p.is_empty() && p.len() <= 5 && p.bytes().all(|b| b.is_ascii_digit()))
+    if parts.len() != 3 || !parts.iter().all(|p| !p.is_empty() && p.len() <= 5 && p.bytes().all(|b| b.is_ascii_digit())) {
+        return None;
+    }
+    Some((parts[0].parse().ok()?, parts[1].parse().ok()?, parts[2].parse().ok()?))
+}
+
+fn is_version(v: &str) -> bool {
+    version_parts(v).is_some()
 }
 
 /// 사용자가 바꿀 수 있는 설정만 검증 후 저장한다.
 pub fn apply(c: &Connection, key: &str, value: &str) -> AppResult<()> {
+    if key == SEEN_VERSION {
+        return apply_seen_version(c, value);
+    }
     let valid = if BOOL_KEYS.contains(&key) {
         value == "true" || value == "false"
     } else if key == "day_start_hour" {
         value.parse::<u32>().map(|h| h < 24).unwrap_or(false)
     } else if key == "theme" {
         THEMES.contains(&value)
-    } else if key == SEEN_VERSION {
-        is_version(value)
     } else {
         return Err(AppError::invalid("알 수 없는 설정이에요"));
     };
@@ -76,6 +84,17 @@ pub fn apply(c: &Connection, key: &str, value: &str) -> AppResult<()> {
         return Err(AppError::invalid("설정 값이 올바르지 않아요"));
     }
     set(c, key, value)
+}
+
+/// 본 버전은 앞으로만 간다. 복원 프로그램이 C드라이브를 되돌려 예전 버전이 잠깐 실행돼도
+/// 더 새 버전의 기록을 덮어쓰지 않아야, 업데이트 뒤 '바뀐 점'이 날마다 다시 뜨지 않는다.
+fn apply_seen_version(c: &Connection, value: &str) -> AppResult<()> {
+    let next = version_parts(value).ok_or_else(|| AppError::invalid("설정 값이 올바르지 않아요"))?;
+    let current = get(c, SEEN_VERSION)?.as_deref().and_then(version_parts);
+    if current.is_some_and(|cur| cur >= next) {
+        return Ok(());
+    }
+    set(c, SEEN_VERSION, value)
 }
 
 pub fn window_pos(c: &Connection) -> AppResult<Option<(i32, i32)>> {
@@ -179,6 +198,17 @@ mod tests {
         for bad in ["0.3", "v0.3.0", "0.3.0-beta", "0..1", "1.2.3.4", ""] {
             assert!(apply(&c, SEEN_VERSION, bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn seen_version_never_goes_back_when_an_older_app_runs() {
+        let c = open_in_memory().unwrap();
+        apply(&c, SEEN_VERSION, "0.4.0").unwrap();
+        // 복원 프로그램으로 0.3.0이 잠깐 실행돼 자기 버전을 적으려 해도
+        apply(&c, SEEN_VERSION, "0.3.0").unwrap();
+        assert_eq!(load(&c).unwrap().seen_version.as_deref(), Some("0.4.0"));
+        apply(&c, SEEN_VERSION, "0.10.0").unwrap();
+        assert_eq!(load(&c).unwrap().seen_version.as_deref(), Some("0.10.0"));
     }
 
     #[test]

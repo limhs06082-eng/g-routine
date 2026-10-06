@@ -71,11 +71,18 @@ async fn download() -> Result<String, String> {
     if !res.status().is_success() {
         return Err(format!("HTTP {}", res.status()));
     }
-    let body = res.bytes().await.map_err(|e| e.to_string())?;
-    if body.len() > MAX_BYTES {
+    if res.content_length().is_some_and(|n| n > MAX_BYTES as u64) {
         return Err("너무 큼".into());
     }
-    String::from_utf8(body.to_vec()).map_err(|e| e.to_string())
+    let mut res = res;
+    let mut body = Vec::new();
+    while let Some(chunk) = res.chunk().await.map_err(|e| e.to_string())? {
+        body.extend_from_slice(&chunk);
+        if body.len() > MAX_BYTES {
+            return Err("너무 큼".into());
+        }
+    }
+    String::from_utf8(body).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

@@ -206,8 +206,8 @@ pub async fn open_manager(app: AppHandle) -> AppResult<()> {
 }
 
 #[tauri::command]
-pub fn resize_widget(app: AppHandle, height: f64) -> AppResult<bool> {
-    Ok(window::resize_widget(&app, height)?)
+pub fn resize_widget(app: AppHandle, height: f64, width: Option<f64>) -> AppResult<bool> {
+    Ok(window::resize_widget(&app, height, width)?)
 }
 
 #[tauri::command]

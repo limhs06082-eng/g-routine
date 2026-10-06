@@ -135,7 +135,7 @@ export const api = {
   changeDataDir: (dir: string) => invoke<void>("change_data_dir", { dir }),
   openManager: () => invoke<void>("open_manager"),
   /** 위젯 높이를 내용에 맞춘다. true면 화면 높이 상한에 걸려 스크롤이 필요하다. */
-  resizeWidget: (height: number) => invoke<boolean>("resize_widget", { height }),
+  resizeWidget: (height: number, width: number | null = null) => invoke<boolean>("resize_widget", { height, width }),
   hideWidget: () => invoke<void>("hide_widget"),
 };
 

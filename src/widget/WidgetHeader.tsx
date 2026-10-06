@@ -7,9 +7,11 @@ interface Props {
   pinned: boolean;
   onTogglePin: () => void;
   onShrink: () => void;
+  /** 전역 단축키를 쓸 수 있으면 숨기기 버튼에 안내한다 */
+  shortcut: boolean;
 }
 
-export function WidgetHeader({ dayLabel, pinned, onTogglePin, onShrink }: Props) {
+export function WidgetHeader({ dayLabel, pinned, onTogglePin, onShrink, shortcut }: Props) {
   return (
     <div data-tauri-drag-region className="flex cursor-default items-center justify-between px-3.5 pt-3 pb-2.5">
       <div data-tauri-drag-region>
@@ -30,7 +32,7 @@ export function WidgetHeader({ dayLabel, pinned, onTogglePin, onShrink }: Props)
         <Button variant="ghost" size="icon-sm" aria-label="관리 창 열기" onClick={() => void api.openManager()}>
           <SettingsIcon className="size-3.5 text-muted-foreground" />
         </Button>
-        <Button variant="ghost" size="icon-sm" aria-label="위젯 숨기기" title="숨기기 (Ctrl+Alt+G로 다시 보기)" onClick={() => void api.hideWidget()}>
+        <Button variant="ghost" size="icon-sm" aria-label="위젯 숨기기" title={shortcut ? "숨기기 (Ctrl+Alt+G로 다시 보기)" : "숨기기 (트레이 아이콘으로 다시 보기)"} onClick={() => void api.hideWidget()}>
           <Minus className="size-3.5 text-muted-foreground" />
         </Button>
       </div>

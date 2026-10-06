@@ -77,8 +77,8 @@ pub fn import(c: &Connection, b: &BackupFile) -> AppResult<()> {
     let tx = c.unchecked_transaction()?;
     tx.execute("DELETE FROM day_items", [])?;
     tx.execute("DELETE FROM routines", [])?;
-    // 창 위치와 '바뀐 점' 안내를 본 버전은 이 PC의 것이라 그대로 둔다
-    tx.execute("DELETE FROM settings WHERE key NOT LIKE 'window_%' AND key <> 'seen_version'", [])?;
+    // 창 위치, '바뀐 점'을 본 버전, 내려받은 공휴일 표는 이 PC의 것이라 그대로 둔다
+    tx.execute("DELETE FROM settings WHERE key NOT LIKE 'window_%' AND key NOT IN ('seen_version', 'holidays_cache')", [])?;
     for r in &b.routines {
         tx.execute(
             "INSERT INTO routines (id, title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, archived_at, slot)
@@ -251,6 +251,17 @@ mod tests {
         settings::apply(&dst, settings::SEEN_VERSION, "0.3.0").unwrap();
         import(&dst, &backup).unwrap();
         assert_eq!(settings::load(&dst).unwrap().seen_version.as_deref(), Some("0.3.0"));
+    }
+
+    #[test]
+    fn import_keeps_this_pcs_downloaded_holiday_table() {
+        let mut backup = export(&open_in_memory().unwrap(), "2026-10-12T10:00:00").unwrap();
+        // 다른 PC의 보관본이 섞여 있어도 이 PC의 것을 지키고, 백업의 것은 쓰지 않는다
+        backup.settings.push(("holidays_cache".into(), "다른 PC".into()));
+        let dst = open_in_memory().unwrap();
+        settings::set(&dst, "holidays_cache", "이 PC").unwrap();
+        import(&dst, &backup).unwrap();
+        assert_eq!(settings::get(&dst, "holidays_cache").unwrap().as_deref(), Some("이 PC"));
     }
 
     #[test]

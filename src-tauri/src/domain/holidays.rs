@@ -16,6 +16,8 @@ use crate::domain::day::parse_day;
 const BUILT_IN: &str = include_str!("../../data/holidays.json");
 const NAME_MAX: usize = 30;
 const PER_YEAR_MAX: usize = 60;
+/// 한 해의 공휴일은 적어도 이만큼은 된다 (실수로 한두 개만 남긴 표를 올려도 그해를 지우지 않게)
+const PER_YEAR_MIN: usize = 10;
 
 #[derive(Deserialize)]
 struct FileEntry {
@@ -38,6 +40,8 @@ pub struct HolidayTable {
 impl HolidayTable {
     /// holidays.json을 읽는다. 형식이 하나라도 어긋나면 통째로 거절한다 (내려받은 파일이 깨졌을 때 대비).
     pub fn parse(json: &str) -> Result<Self, String> {
+        // 메모장으로 저장하면 앞에 BOM이 붙는다
+        let json = json.strip_prefix('\u{feff}').unwrap_or(json);
         let file: HolidayFile = serde_json::from_str(json).map_err(|e| format!("형식 오류: {e}"))?;
         if file.version != 1 {
             return Err(format!("모르는 버전: {}", file.version));
@@ -48,7 +52,7 @@ impl HolidayTable {
             if !(2000..=2100).contains(&year) {
                 return Err(format!("연도 범위 밖: {year}"));
             }
-            if entries.is_empty() || entries.len() > PER_YEAR_MAX {
+            if entries.len() < PER_YEAR_MIN || entries.len() > PER_YEAR_MAX {
                 return Err(format!("{year}년 항목 수가 이상함: {}", entries.len()));
             }
             let mut days = BTreeMap::new();
@@ -204,33 +208,48 @@ mod tests {
         }
     }
 
+    /// 테스트용 한 해: 주어진 (날짜, 이름)들에 최소 개수를 채우는 12월 항목을 더한다
+    fn year_json(year: &str, entries: &[(&str, &str)]) -> String {
+        let mut items: Vec<String> = entries.iter().map(|(d, n)| format!(r#"{{"date":"{d}","name":"{n}"}}"#)).collect();
+        for day in 10..10 + PER_YEAR_MIN {
+            items.push(format!(r#"{{"date":"{year}-12-{day}","name":"채움"}}"#));
+        }
+        format!(r#""{year}":[{}]"#, items.join(","))
+    }
+
+    fn file(years: &[String]) -> String {
+        format!(r#"{{"version":1,"years":{{{}}}}}"#, years.join(","))
+    }
+
     #[test]
     fn parse_rejects_anything_suspicious() {
-        let ok = r#"{"version":1,"years":{"2028":[{"date":"2028-01-01","name":"신정"}]}}"#;
-        assert!(HolidayTable::parse(ok).is_ok());
-        for bad in [
-            "not json",
-            r#"{"version":2,"years":{"2028":[{"date":"2028-01-01","name":"신정"}]}}"#,
-            r#"{"version":1,"years":{}}"#,
-            r#"{"version":1,"years":{"2028":[]}}"#,
-            r#"{"version":1,"years":{"abcd":[{"date":"2028-01-01","name":"신정"}]}}"#,
-            r#"{"version":1,"years":{"2028":[{"date":"2029-01-01","name":"신정"}]}}"#,
-            r#"{"version":1,"years":{"2028":[{"date":"2028-13-01","name":"신정"}]}}"#,
-            r#"{"version":1,"years":{"2028":[{"date":"2028-01-01","name":"  "}]}}"#,
-            r#"{"version":1,"years":{"2028":[{"date":"2028-01-01","name":"신정"},{"date":"2028-01-01","name":"신정"}]}}"#,
-        ] {
-            assert!(HolidayTable::parse(bad).is_err(), "{bad}");
+        let ok = file(&[year_json("2028", &[("2028-01-01", "신정")])]);
+        assert!(HolidayTable::parse(&ok).is_ok());
+        assert!(HolidayTable::parse(&format!("\u{feff}{ok}")).is_ok(), "메모장의 BOM은 괜찮다");
+        let bad = [
+            "not json".to_string(),
+            ok.replace(r#""version":1"#, r#""version":2"#),
+            r#"{"version":1,"years":{}}"#.to_string(),
+            // 한두 개만 남은 해는 실수로 보고 거절한다
+            r#"{"version":1,"years":{"2028":[{"date":"2028-01-01","name":"신정"}]}}"#.to_string(),
+            file(&[year_json("abcd", &[])]),
+            file(&[year_json("2028", &[("2029-01-01", "신정")])]),
+            file(&[year_json("2028", &[("2028-13-01", "신정")])]),
+            file(&[year_json("2028", &[("2028-01-01", "  ")])]),
+            file(&[year_json("2028", &[("2028-01-01", "신정"), ("2028-01-01", "신정")])]),
+        ];
+        for b in bad {
+            assert!(HolidayTable::parse(&b).is_err(), "{b}");
         }
     }
 
     #[test]
     fn a_downloaded_year_replaces_that_year_only() {
         // 2027년에 임시공휴일이 생긴 표를 받으면 2027년만 바뀌고 2026년은 그대로
-        let downloaded = HolidayTable::parse(
-            r#"{"version":1,"years":{
-                "2027":[{"date":"2027-01-01","name":"신정"},{"date":"2027-03-02","name":"임시공휴일"}],
-                "2028":[{"date":"2028-01-01","name":"신정"}]}}"#,
-        )
+        let downloaded = HolidayTable::parse(&file(&[
+            year_json("2027", &[("2027-01-01", "신정"), ("2027-03-02", "임시공휴일")]),
+            year_json("2028", &[("2028-01-01", "신정")]),
+        ]))
         .unwrap();
         let merged = built_in().merged(&downloaded);
         assert_eq!(merged.name(date("2027-03-02")), Some("임시공휴일"));

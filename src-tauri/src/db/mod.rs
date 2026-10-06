@@ -126,6 +126,14 @@ mod tests {
         assert_eq!((list[0].title.as_str(), list[0].slot), ("출결 확인", None));
         // 정해진 값 말고는 넣을 수 없다
         assert!(conn.execute("UPDATE routines SET slot = 'lunch'", []).is_err());
+        // 복원 프로그램으로 돌아간 예전 버전(v0.2.0)은 slot 없이 넣는다. 그래도 된다
+        conn.execute(
+            "INSERT INTO routines (title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at)
+             VALUES ('공문 확인', 'daily', 0, NULL, NULL, NULL, 1, '2026-10-02T09:00:00')",
+            [],
+        )
+        .unwrap();
+        assert_eq!(routines::list_unarchived(&conn).unwrap()[1].slot, None);
     }
 
     #[test]

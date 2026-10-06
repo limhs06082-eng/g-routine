@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import { unseenNotes } from "@/lib/changelog";
+import { compareVersions, unseenNotes } from "@/lib/changelog";
 import { useAutoResize, useData, useSettings } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { Setup } from "./Setup";
@@ -23,9 +23,11 @@ export function WidgetApp() {
       .catch(() => setVersion(null));
   }, []);
   // 업데이트 뒤 아직 보지 않은 '바뀐 점'. 보여 줄 것이 없으면 조용히 지금 버전을 본 것으로 적는다.
+  // 본 버전이 지금보다 새것이면(복원 프로그램이 예전 버전으로 되돌린 PC) 아무것도 하지 않는다.
   const seen = settings?.seenVersion ?? null;
-  const notes = settings && version && seen !== version ? unseenNotes(seen, version) : [];
-  const markSeen = settings && version && seen !== version ? version : null;
+  const newer = Boolean(settings && version && (seen === null || compareVersions(version, seen) > 0));
+  const notes = newer && version ? unseenNotes(seen, version) : [];
+  const markSeen = newer ? version : null;
   useEffect(() => {
     if (markSeen && notes.length === 0) void update("seen_version", markSeen).catch(() => {});
   }, [markSeen, notes.length, update]);
@@ -35,6 +37,7 @@ export function WidgetApp() {
       onTogglePin={() => update("always_on_top", String(!pinned))}
       mini={mini}
       onToggleMini={() => update("mini_mode", String(!mini))}
+      shortcut={status?.shortcut ?? false}
       banner={
         notes.length > 0 && markSeen ? <WhatsNew notes={notes} onClose={() => void update("seen_version", markSeen).catch(() => {})} /> : null
       }

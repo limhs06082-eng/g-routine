@@ -16,6 +16,8 @@ pub const MANAGER: &str = "manager";
 /// 이 값을 지정하면 Tauri 기본 인자가 사라지므로 기본값(--disable-features=…)을 함께 적는다.
 /// WebView2는 같은 데이터 폴더의 창끼리 인자가 같아야 하므로 tauri.conf.json 위젯 창과 반드시 같은 값을 쓴다.
 pub const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu";
+/// 위젯 보통 너비(논리 px). tauri.conf.json 위젯 창의 width와 같아야 한다.
+pub const WIDGET_WIDTH: f64 = 280.0;
 const MARGIN: f64 = 12.0;
 /// 미니 모드(알약 모양)도 들어가도록 낮게 둔다
 const MIN_HEIGHT: f64 = 40.0;
@@ -99,8 +101,10 @@ pub fn reset_position(app: &AppHandle) {
 
 /// 내용 높이(논리 px)에 맞춰 위젯 높이를 바꾸되 아래 모서리를 고정한다.
 /// 최대 높이는 위젯이 있는 모니터의 작업 영역 높이(여백 제외)다. 그보다 길 때만 화면 안에서 스크롤된다.
+/// logical_width가 있으면(미니 모드) 창 너비를 그만큼으로 줄이고, 없으면 보통 너비로 돌린다. 오른쪽 모서리는 고정한다.
+/// 투명한 창도 클릭을 받으므로, 알약만 보일 때는 창도 알약 크기여야 뒤의 프로그램을 가리지 않는다.
 /// 반환값: 내용이 최대 높이를 넘었는지. true일 때만 화면 쪽에서 스크롤을 켠다.
-pub fn resize_widget(app: &AppHandle, logical_height: f64) -> tauri::Result<bool> {
+pub fn resize_widget(app: &AppHandle, logical_height: f64, logical_width: Option<f64>) -> tauri::Result<bool> {
     let Some(w) = app.get_webview_window(WIDGET) else { return Ok(false) };
     let Some(m) = w.current_monitor()?.or(w.primary_monitor()?) else { return Ok(false) };
     let scale = w.scale_factor()?;
@@ -113,12 +117,14 @@ pub fn resize_widget(app: &AppHandle, logical_height: f64) -> tauri::Result<bool
     let min_h = (MIN_HEIGHT * scale).round() as i32;
     let (y, new_h) = fit_height(pos.y, old.height as i32, wanted, min_h, work, margin);
     let capped = wanted > new_h;
-    if new_h == old.height as i32 && y == pos.y {
+    let new_w = (logical_width.unwrap_or(WIDGET_WIDTH).clamp(40.0, WIDGET_WIDTH) * scale).round() as i32;
+    let x = pos.x + old.width as i32 - new_w;
+    if new_h == old.height as i32 && y == pos.y && new_w == old.width as i32 {
         return Ok(capped);
     }
     mark_programmatic_move(app);
-    w.set_size(PhysicalSize::new(old.width, new_h as u32))?;
-    w.set_position(PhysicalPosition::new(pos.x, y))?;
+    w.set_size(PhysicalSize::new(new_w as u32, new_h as u32))?;
+    w.set_position(PhysicalPosition::new(x, y))?;
     Ok(capped)
 }
 
@@ -149,11 +155,19 @@ pub fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
             hide_widget(window.app_handle());
         }
         WindowEvent::Moved(pos) => {
-            let h = window.outer_size().map(|s| s.height as i32).unwrap_or(0);
-            schedule_position_save(window.app_handle(), pos.x, pos.y + h);
+            let Ok(size) = window.outer_size() else { return };
+            let scale = window.scale_factor().unwrap_or(1.0);
+            let x = normal_left(pos.x, size.width as i32, (WIDGET_WIDTH * scale).round() as i32);
+            schedule_position_save(window.app_handle(), x, pos.y + size.height as i32);
         }
         _ => {}
     }
+}
+
+/// 저장하는 x는 늘 '보통 너비일 때의 왼쪽'이다. 미니 모드(오른쪽 고정으로 좁아진 창)에서 옮겨도
+/// 다시 켜거나 크게 볼 때 같은 자리에 오도록, 오른쪽 모서리에서 보통 너비만큼 뺀다.
+fn normal_left(x: i32, width: i32, normal_width: i32) -> i32 {
+    x + width - normal_width
 }
 
 /// 사용자가 끌어서 옮긴 위치만 저장한다 (프로그램 이동 직후 400ms는 무시, 500ms 디바운스).
@@ -202,7 +216,21 @@ pub fn spawn_day_watcher(app: AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::BROWSER_ARGS;
+    use super::{normal_left, BROWSER_ARGS, WIDGET_WIDTH};
+
+    #[test]
+    fn widget_width_matches_the_window_config() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../../tauri.conf.json")).unwrap();
+        let widget = conf["app"]["windows"].as_array().unwrap().iter().find(|w| w["label"] == "widget").unwrap();
+        assert_eq!(widget["width"].as_f64(), Some(WIDGET_WIDTH));
+    }
+
+    #[test]
+    fn a_mini_widget_saves_where_the_full_widget_would_start() {
+        // 보통 너비 280에서는 그대로, 알약 100px로 좁아진 창은 오른쪽 모서리 기준으로 되돌려 저장
+        assert_eq!(normal_left(1000, 280, 280), 1000);
+        assert_eq!(normal_left(1180, 100, 280), 1000);
+    }
 
     #[test]
     fn widget_and_manager_share_browser_args() {

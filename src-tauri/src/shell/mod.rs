@@ -33,6 +33,8 @@ pub fn after_ready(app: &AppHandle) {
     if let Ok(s) = app.state::<AppState>().with_conn(settings::load) {
         apply_all(app, &s);
     }
+    // 데이터 폴더가 시작보다 늦게 준비된 경우(처음 설정 · 다시 시도)에도 보관해 둔 공휴일 표를 쓴다
+    holidays::load_cached(app);
 }
 
 fn apply_all(app: &AppHandle, s: &Settings) {

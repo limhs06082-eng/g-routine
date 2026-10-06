@@ -63,9 +63,11 @@ interface Props {
   onToggleMini: () => Promise<unknown>;
   /** 머리글 바로 아래에 보일 안내 (예: 업데이트 뒤 '바뀐 점') */
   banner?: ReactNode;
+  /** 전역 단축키(Ctrl+Alt+G)를 쓸 수 있는지 (숨기기 버튼 안내에 쓴다) */
+  shortcut?: boolean;
 }
 
-export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini, banner }: Props) {
+export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini, banner, shortcut = false }: Props) {
   const { data, error, reload, setData } = useData(api.today);
   const [leaving, setLeaving] = useState<number[]>([]);
   const [undoItem, setUndoItem] = useState<DayItem | null>(null);
@@ -76,6 +78,17 @@ export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini, banner }: 
 
   if (!data) {
     if (!error) return <div className={mini ? "h-8" : "h-28"} />;
+    if (mini) {
+      // 미니 모드는 카드가 없어 투명한 창 위에 글자만 뜨지 않도록 알약 모양으로 보여 준다
+      return (
+        <div data-mini-pill className="flex items-center gap-1 rounded-full border border-border bg-background py-0.5 pr-0.5 pl-3 text-xs shadow-[0_2px_10px_rgba(44,44,42,0.10)]">
+          <span className="text-muted-foreground">불러오지 못했어요</span>
+          <Button size="sm" variant="ghost" className="h-6 rounded-full px-2" onClick={() => void reload()}>
+            다시 시도
+          </Button>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center gap-2 px-4 py-6 text-center text-xs text-muted-foreground">
         <span>오늘 목록을 불러오지 못했어요.</span>
@@ -150,6 +163,7 @@ export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini, banner }: 
         pinned={pinned}
         onTogglePin={() => void onTogglePin().catch((e) => setNotice(errorMessage(e)))}
         onShrink={() => void onToggleMini().catch((e) => setNotice(errorMessage(e)))}
+        shortcut={shortcut}
       />
       {banner}
       <div className="px-3.5 pb-2.5">
