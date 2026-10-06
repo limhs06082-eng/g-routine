@@ -90,10 +90,12 @@ export function Setup({ status }: { status: AppStatus }) {
             </Button>
           </div>
         )}
-        <p className="flex gap-1 text-[11px] leading-4 text-muted-foreground">
-          <Info className="mt-px size-3 shrink-0" />
-          복원 프로그램이 있는 PC는 D드라이브를 고르세요. 고른 폴더 안에 G-routine\data 폴더가 만들어져요.
-        </p>
+        {!status.portable && (
+          <p className="flex gap-1 text-[11px] leading-4 text-muted-foreground">
+            <Info className="mt-px size-3 shrink-0" />
+            복원 프로그램이 있는 PC는 D드라이브를 고르세요. 고른 폴더 안에 G-routine\data 폴더가 만들어져요.
+          </p>
+        )}
       </section>
 
       <section className="flex flex-col gap-1.5">

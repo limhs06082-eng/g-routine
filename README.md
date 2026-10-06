@@ -4,7 +4,7 @@
 
 ## 설치
 
-[릴리스 페이지](https://github.com/limhs06082-eng/g-routine/releases/latest)에서 내려받으세요.
+[릴리스 페이지](https://github.com/limhs06082-eng/g-routine/releases/latest)에서 내려받으세요. 그림으로 보는 설치 순서는 [설치 안내](docs/install-guide.md)를 참고하세요.
 
 | 방식 | 파일 | 특징 |
 |---|---|---|

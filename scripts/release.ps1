@@ -74,8 +74,10 @@ Run "push" { git push origin main "v$Version" }
 
 # 6. GitHub 릴리스 (latest로 표시 → 앱이 latest.json을 받아 감)
 $zip = Join-Path $root "release/G-routine_${Version}_portable.zip"
+# 릴리스 페이지 본문: 바뀐 점 + 설치 안내 링크 (latest.json의 notes는 짧게 둔다)
+$releaseBody = "$($latest.notes)`n`n처음 설치한다면: [설치 안내](https://github.com/$repo/blob/main/docs/install-guide.md) (Windows 경고 창이 뜰 때 대처 방법 포함)"
 Run "GitHub 릴리스" {
   gh release create "v$Version" $setup "$setup.sig" $zip $latestPath `
-    --repo $repo --title "G-routine v$Version" --notes $latest.notes --latest
+    --repo $repo --title "G-routine v$Version" --notes $releaseBody --latest
 }
 Write-Output "완료: https://github.com/$repo/releases/tag/v$Version"

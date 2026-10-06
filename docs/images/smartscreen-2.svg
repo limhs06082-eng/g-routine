@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="330" viewBox="0 0 560 330" font-family="'Malgun Gothic', 'Pretendard', sans-serif">
+  <title>Windows의 PC 보호 창 — 2단계: 실행 누르기 (그림)</title>
+  <rect width="560" height="330" rx="10" fill="#1f5fa8"/>
+  <text x="32" y="58" fill="#ffffff" font-size="26" font-weight="600">Windows의 PC 보호</text>
+  <text x="32" y="102" fill="#e8f0fb" font-size="15">Microsoft Defender SmartScreen에서 인식할 수 없는 앱의</text>
+  <text x="32" y="126" fill="#e8f0fb" font-size="15">시작을 차단했습니다. 이 앱을 실행하면 PC가 위험에</text>
+  <text x="32" y="150" fill="#e8f0fb" font-size="15">노출될 수 있습니다.</text>
+  <text x="32" y="190" fill="#e8f0fb" font-size="14">앱:      G-routine_x.y.z_x64-setup.exe</text>
+  <text x="32" y="214" fill="#e8f0fb" font-size="14">게시자:  알 수 없는 게시자</text>
+  <rect x="262" y="270" width="132" height="36" rx="4" fill="#ffffff" fill-opacity="0.12" stroke="#ffffff" stroke-opacity="0.6"/>
+  <text x="328" y="294" fill="#ffffff" font-size="15" text-anchor="middle">실행</text>
+  <rect x="254" y="262" width="148" height="52" rx="8" fill="none" stroke="#ff6b6b" stroke-width="3"/>
+  <circle cx="240" cy="288" r="13" fill="#ff6b6b"/>
+  <text x="240" y="293" fill="#ffffff" font-size="15" font-weight="700" text-anchor="middle">2</text>
+  <rect x="404" y="270" width="132" height="36" rx="4" fill="#ffffff" fill-opacity="0.12" stroke="#ffffff" stroke-opacity="0.6"/>
+  <text x="470" y="294" fill="#ffffff" font-size="15" text-anchor="middle">실행 안 함</text>
+  <text x="32" y="250" fill="#bcd3f0" font-size="12">※ 이해를 돕기 위한 그림으로, 실제 화면과 조금 다를 수 있어요</text>
+</svg>
