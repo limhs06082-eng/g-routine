@@ -4,6 +4,13 @@
  */
 export const CHANGELOG: { version: string; items: string[] }[] = [
   {
+    version: "0.4.0",
+    items: [
+      "새 버전은 켜진 직후에만 스스로 설치되고, 쓰는 중에는 '지금 설치'를 눌러야 설치돼요",
+      "마감 지난 일이 여러 개면 알림 하나로 묶어서 알려요",
+    ],
+  },
+  {
     version: "0.3.0",
     items: [
       "Ctrl+Alt+G로 위젯을 숨기고 다시 띄워요",

@@ -21,6 +21,8 @@ pub struct AppStatus {
     pub data_dir: Option<String>,
     /// 전역 단축키(Ctrl+Alt+G)를 등록했는지. 다른 프로그램이 쓰고 있으면 false.
     pub shortcut: bool,
+    /// 내려받을 수 있는 새 버전 (주기 확인에서 찾았지만 아직 설치하지 않음). 위젯이 '지금 설치'를 보여 준다.
+    pub pending_update: Option<String>,
 }
 
 pub struct AppState {
@@ -33,6 +35,8 @@ pub struct AppState {
     pub programmatic_move: Mutex<Option<Instant>>,
     /// 시작 과정(boot)이 상태를 통째로 다시 쓰므로 단축키 등록 결과는 따로 둔다
     pub shortcut: AtomicBool,
+    /// 설치를 기다리는 새 버전 (같은 이유로 따로 둔다)
+    pending_update: Mutex<Option<String>>,
 }
 
 impl AppState {
@@ -45,6 +49,13 @@ impl AppState {
             move_seq: AtomicU64::new(0),
             programmatic_move: Mutex::new(None),
             shortcut: AtomicBool::new(false),
+            pending_update: Mutex::new(None),
+        }
+    }
+
+    pub fn set_pending_update(&self, version: Option<String>) {
+        if let Ok(mut g) = self.pending_update.lock() {
+            *g = version;
         }
     }
 
@@ -76,6 +87,7 @@ impl AppState {
     pub fn status(&self) -> AppStatus {
         let mut s = self.status.lock().map(|s| s.clone()).unwrap_or_default();
         s.shortcut = self.shortcut.load(Ordering::Relaxed);
+        s.pending_update = self.pending_update.lock().ok().and_then(|g| g.clone());
         s
     }
 
@@ -123,6 +135,17 @@ mod tests {
         s.replace_conn(Some(conn_with_marker("old")));
         assert!(s.swap_conn(|_| Err(AppError::invalid("실패"))).is_err());
         assert_eq!(s.with_conn(|c| Ok(marker(c))).unwrap(), "old");
+    }
+
+    #[test]
+    fn a_pending_update_shows_in_status_and_survives_a_status_rewrite() {
+        let s = AppState::new(PathBuf::from("loc.json"), PathBuf::from("exe"));
+        assert_eq!(s.status().pending_update, None);
+        s.set_pending_update(Some("0.4.0".into()));
+        s.update_status(|st| *st = AppStatus::default()); // boot가 상태를 통째로 다시 쓰는 경우
+        assert_eq!(s.status().pending_update.as_deref(), Some("0.4.0"));
+        s.set_pending_update(None);
+        assert_eq!(s.status().pending_update, None);
     }
 
     #[test]

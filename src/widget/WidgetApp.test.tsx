@@ -11,6 +11,7 @@ const apiMock = vi.hoisted(() => ({
   setSetting: vi.fn(),
   today: vi.fn(),
   resizeWidget: vi.fn(() => Promise.resolve(false)),
+  installUpdate: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => ({
@@ -20,7 +21,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 
 import { WidgetApp } from "./WidgetApp";
 
-const status: AppStatus = { ready: true, corrupt: false, openFailed: false, portable: false, previousDir: null, suggestedDir: "", dataDir: "D:\G-routine\data", shortcut: true };
+const status: AppStatus = { ready: true, corrupt: false, openFailed: false, portable: false, previousDir: null, suggestedDir: "", dataDir: "D:\G-routine\data", shortcut: true, pendingUpdate: null };
 const settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: true, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, miniMode: false, vacationStart: null, vacationEnd: null, seenVersion: null };
 const view: TodayView = { day: "2026-10-12", rest: null, pending: [], done: [] };
 
@@ -48,6 +49,30 @@ test("nothing is shown when this version was already seen", async () => {
   expect(await screen.findByText("오늘의 루틴")).toBeInTheDocument();
   expect(screen.queryByRole("region", { name: "새 버전에서 바뀐 점" })).not.toBeInTheDocument();
   expect(apiMock.setSetting).not.toHaveBeenCalled();
+});
+
+test("a pending update is offered with an install button", async () => {
+  const user = userEvent.setup();
+  apiMock.status.mockResolvedValue({ ...status, pendingUpdate: "0.4.0" });
+  apiMock.settings.mockResolvedValue({ ...settings, seenVersion: "0.3.0" });
+  apiMock.installUpdate.mockReturnValue(new Promise(() => {}));
+  render(<WidgetApp />);
+  const card = await screen.findByRole("region", { name: "새 버전 안내" });
+  expect(card).toHaveTextContent("v0.4.0");
+  await user.click(screen.getByRole("button", { name: "지금 설치" }));
+  expect(apiMock.installUpdate).toHaveBeenCalledTimes(1);
+  expect(await screen.findByText("설치하는 중…")).toBeInTheDocument();
+});
+
+test("a failed install shows the error and lets the user try again", async () => {
+  const user = userEvent.setup();
+  apiMock.status.mockResolvedValue({ ...status, pendingUpdate: "0.4.0" });
+  apiMock.settings.mockResolvedValue({ ...settings, seenVersion: "0.3.0" });
+  apiMock.installUpdate.mockRejectedValue("새 버전을 설치하지 못했어요");
+  render(<WidgetApp />);
+  await user.click(await screen.findByRole("button", { name: "지금 설치" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("새 버전을 설치하지 못했어요");
+  expect(screen.getByRole("button", { name: "지금 설치" })).toBeEnabled();
 });
 
 test("mini mode shows only the pill", async () => {

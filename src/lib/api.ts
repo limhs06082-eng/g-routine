@@ -100,6 +100,8 @@ export interface AppStatus {
   dataDir: string | null;
   /** 전역 단축키(Ctrl+Alt+G)를 등록했는지. 다른 프로그램이 쓰고 있으면 false */
   shortcut: boolean;
+  /** 주기 확인에서 찾았지만 아직 설치하지 않은 새 버전. 위젯이 '지금 설치'를 보여 준다 */
+  pendingUpdate: string | null;
 }
 
 export interface DataDirInfo {
@@ -137,6 +139,8 @@ export const api = {
   /** 위젯 높이를 내용에 맞춘다. true면 화면 높이 상한에 걸려 스크롤이 필요하다. */
   resizeWidget: (height: number, width: number | null = null) => invoke<boolean>("resize_widget", { height, width }),
   hideWidget: () => invoke<void>("hide_widget"),
+  /** 준비된 새 버전을 받아서 설치한다. 설치가 시작되면 앱이 꺼졌다 다시 켜진다 */
+  installUpdate: () => invoke<void>("install_update"),
 };
 
 export function errorMessage(e: unknown): string {

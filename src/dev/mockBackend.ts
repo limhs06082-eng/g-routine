@@ -114,7 +114,7 @@ function historyDay(day: string): DayItem[] {
 }
 
 function status(): AppStatus {
-  return { ready, corrupt: false, openFailed: false, portable: false, previousDir: null, suggestedDir: DATA_DIR, dataDir: ready ? DATA_DIR : null, shortcut: true };
+  return { ready, corrupt: false, openFailed: false, portable: false, previousDir: null, suggestedDir: DATA_DIR, dataDir: ready ? DATA_DIR : null, shortcut: true, pendingUpdate: new URLSearchParams(window.location.search).get("update") };
 }
 
 function changed() {
@@ -225,6 +225,9 @@ export function installMockBackend() {
       case "open_manager":
         window.open("?window=manager", "_blank");
         return null;
+      case "install_update":
+        // 미리보기(?update=0.4.0): 잠깐 기다렸다가 실패해 오류 문구와 다시 시도를 볼 수 있게 한다
+        return new Promise((_, reject) => setTimeout(() => reject("새 버전을 설치하지 못했어요. 잠시 후 다시 시도해 주세요 (미리보기)"), 1500));
       default:
         return null;
     }

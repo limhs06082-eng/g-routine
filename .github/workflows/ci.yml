@@ -1,0 +1,44 @@
+# push · PR마다 화면 테스트와 규칙 · 저장 테스트를 돌린다.
+# 공휴일 표(src-tauri/data/holidays.json)만 고쳐 push해도 cargo test가 표를 검사하므로,
+# 잘못된 표가 설치된 PC로 내려가기 전에 여기서 걸린다.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Rust 쪽에 Windows 전용 코드(드라이브 종류, WebView2)가 있어 Windows에서 돌린다.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: 패키지 설치
+        run: npm ci
+
+      # tauri::generate_context!가 dist 폴더를 요구하므로 cargo test 전에 화면을 먼저 빌드한다 (tsc 포함)
+      - name: 화면 빌드 · 타입 검사
+        run: npm run build
+
+      - name: 화면 테스트
+        run: npm test
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: 규칙 · 저장 테스트
+        run: cargo test --manifest-path src-tauri/Cargo.toml

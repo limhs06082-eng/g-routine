@@ -28,6 +28,7 @@ const base: AppStatus = {
   suggestedDir: "D:\\G-routine\\data",
   dataDir: null,
   shortcut: true,
+  pendingUpdate: null,
 };
 
 beforeEach(() => {

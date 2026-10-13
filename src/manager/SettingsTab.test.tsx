@@ -32,6 +32,7 @@ const status: AppStatus = {
   suggestedDir: "D:\\G-routine\\data",
   dataDir: "D:\\G-routine\\data",
   shortcut: true,
+  pendingUpdate: null,
 };
 
 function renderTab() {

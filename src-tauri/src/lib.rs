@@ -78,6 +78,7 @@ pub fn run() {
             commands::open_manager,
             commands::resize_widget,
             commands::hide_widget,
+            commands::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("G-routine을 실행하지 못했어요");

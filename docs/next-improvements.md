@@ -55,6 +55,22 @@ MVP(v0.1.0)를 개발·검증하면서 나온 개선 후보를 우선순위대�
   - 토스트 타이머, 주말 문구, 실패한 빠른 추가·되돌리기
   - 하루 시작 시각 변경, 템플릿 적용, 손상 DB 복구에 백업이 없는 경우
 
+## F. v0.3 비판 리뷰에서 나온 것 (2026-10-13)
+
+| # | 개선 | 상태 |
+|---|---|---|
+| 1 | 릴리스 스크립트가 테스트를 먼저 돌리고, GitHub Actions CI 추가 | ✅ 적용함 (2026-10-13) — `release.ps1` 0단계, `.github/workflows/ci.yml` |
+| 2 | 자동 업데이트는 켜진 직후에만 스스로 설치, 쓰는 중에는 위젯에 '지금 설치'만 표시 | ✅ 적용함 (2026-10-13) — `shell/update.rs`, `widget/UpdateBanner.tsx` |
+| 3 | 마감 알림을 하나로 묶고 첫 확인을 2분 뒤로 | ✅ 적용함 (2026-10-13) — `shell/alerts.rs` |
+| 4 | 두 번째 백업 폴더(OneDrive · USB)에 주 1회 JSON 백업 | 미정 |
+| 5 | `get_today`가 바뀐 것이 없을 때 DB에 쓰지 않기 (D항목과 같음) | 미정 |
+| 6 | 백업 불러오기에 `routines::validate` 재사용, 링크 아이콘에 주소 표시, exe 경로는 첫 실행 때 확인 | 미정 |
+| 7 | 코드 서명 (Azure Trusted Signing 검토) | 미정 |
+| 8 | 설정 키 정의를 Rust 한 곳으로 모으기 | 미정 |
+| 9 | `windows-sys` 0.45 → Tauri와 같은 버전, `cargo tree -d`를 CI에 | 미정 |
+| 10 | DB 커맨드를 `async`로 (메인 스레드 차단 방지), 백그라운드 루프를 타이머 스레드 하나로 | 미정 |
+| 11 | ESLint · clippy · rustfmt를 CI에 | 미정 |
+
 ## 해마다 할 일
 
 - **공휴일 표 갱신**: 우주항공청이 다음 해 월력요항을 발표하면(보통 6월) `src-tauri/data/holidays.json`에 그해를 추가하고 main에 push하세요. **릴리스 없이** 설치된 앱이 하루 안에 받아 갑니다(포터블 포함). 임시공휴일도 같은 방법으로 바로 반영할 수 있어요. push 전에 꼭 `cd src-tauri && cargo test`로 표가 올바른지 확인하세요(한 해에 10개 미만이거나 형식이 틀리면 앱이 그 파일을 거절해요). GitHub(raw.githubusercontent.com)가 막힌 학교도 있으니 다음 릴리스에도 같은 표가 들어가게 하고, 테스트(`year_totals_match_the_official_calendar`)에 그해 공식 공휴일 수를 추가하세요.

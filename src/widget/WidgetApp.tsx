@@ -7,6 +7,7 @@ import { useAutoResize, useData, useSettings } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { Setup } from "./Setup";
 import { TodayPanel } from "./TodayPanel";
+import { UpdateBanner } from "./UpdateBanner";
 import { WhatsNew } from "./WhatsNew";
 
 export function WidgetApp() {
@@ -28,6 +29,7 @@ export function WidgetApp() {
   const newer = Boolean(settings && version && (seen === null || compareVersions(version, seen) > 0));
   const notes = newer && version ? unseenNotes(seen, version) : [];
   const markSeen = newer ? version : null;
+  const pendingUpdate = status?.pendingUpdate ?? null;
   useEffect(() => {
     if (markSeen && notes.length === 0) void update("seen_version", markSeen).catch(() => {});
   }, [markSeen, notes.length, update]);
@@ -39,7 +41,10 @@ export function WidgetApp() {
       onToggleMini={() => update("mini_mode", String(!mini))}
       shortcut={status?.shortcut ?? false}
       banner={
-        notes.length > 0 && markSeen ? <WhatsNew notes={notes} onClose={() => void update("seen_version", markSeen).catch(() => {})} /> : null
+        <>
+          {pendingUpdate && <UpdateBanner version={pendingUpdate} />}
+          {notes.length > 0 && markSeen && <WhatsNew notes={notes} onClose={() => void update("seen_version", markSeen).catch(() => {})} />}
+        </>
       }
     />
   );

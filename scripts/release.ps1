@@ -1,4 +1,4 @@
-﻿# G-routine 릴리스: 버전 반영 → 서명 빌드 → 포터블 zip → latest.json → 커밋·태그·push → GitHub 릴리스
+﻿# G-routine 릴리스: 테스트 → 버전 반영 → 서명 빌드 → 포터블 zip → latest.json → 커밋·태그·push → GitHub 릴리스
 # 사용법: powershell -ExecutionPolicy Bypass -File scripts/release.ps1 -Version 0.1.1 -Notes "바뀐 점"
 # 서명 키(~/.tauri/g-routine.key)가 있어야 한다. 이 키를 잃어버리면 이미 설치된 앱에 업데이트를 보낼 수 없다.
 param(
@@ -24,6 +24,12 @@ if (git status --porcelain --untracked-files=no) { Fail "커밋하지 않은 변
 if (git tag --list "v$Version") { Fail "v$Version 태그가 이미 있어요." }
 $repo = (gh repo view --json nameWithOwner -q .nameWithOwner)
 if (-not $repo) { Fail "GitHub 저장소를 찾지 못했어요 (gh auth / origin 확인)." }
+
+# 0. 테스트 (하나라도 실패하면 아무것도 바꾸지 않고 멈춘다)
+#    화면 빌드는 타입 검사(tsc)를 포함하고, cargo test가 요구하는 dist 폴더도 만든다.
+Run "화면 빌드 · 타입 검사" { npm run build }
+Run "화면 테스트" { npm test }
+Run "규칙 · 저장 테스트" { cargo test --manifest-path src-tauri/Cargo.toml }
 
 # 1. 버전 반영 (package.json + package-lock.json, tauri.conf.json, Cargo.toml)
 Run "버전 $Version 반영" { npm version $Version --no-git-tag-version --allow-same-version | Out-Null }

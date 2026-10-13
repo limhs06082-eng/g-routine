@@ -1,4 +1,5 @@
 //! 마감 시각 알림: 30초마다 오늘 할 일을 살펴, 마감이 지난 항목을 Windows 알림으로 하루에 한 번씩 알린다.
+//! 한 번에 여러 개가 새로 지났으면(앱을 늦게 켠 때 등) 알림 하나로 묶는다.
 //! 새로 마감이 지난 항목이 생기면 data-changed를 보내 위젯의 마감 칩도 붉게 바뀌게 한다.
 
 use std::collections::HashSet;
@@ -13,6 +14,8 @@ use crate::state::AppState;
 use crate::{now, service, DATA_CHANGED};
 
 const INTERVAL: Duration = Duration::from_secs(30);
+/// 켜진 직후에는 사용자가 막 자리에 앉은 때라 조금 기다렸다가 처음 확인한다
+const FIRST_CHECK: Duration = Duration::from_secs(120);
 
 /// 이미 알린 항목을 업무일별로 기억한다 (앱을 다시 켜면 한 번 더 알릴 수 있다).
 #[derive(Default)]
@@ -39,11 +42,24 @@ pub fn alert_text(item: &DayItem) -> String {
     }
 }
 
+/// 여러 개면 하나로 묶은 본문, 하나면 자세한 문구
+pub fn alert_summary(items: &[DayItem]) -> String {
+    match items {
+        [one] => alert_text(one),
+        many => {
+            let titles: Vec<&str> = many.iter().map(|i| i.title.as_str()).collect();
+            format!("마감 시각이 지난 일이 {}개 있어요: {}", many.len(), titles.join(", "))
+        }
+    }
+}
+
 pub fn spawn_due_alerts(app: AppHandle) {
     std::thread::spawn(move || {
         let mut tracker = AlertTracker::default();
+        let mut wait = FIRST_CHECK;
         loop {
-            std::thread::sleep(INTERVAL);
+            std::thread::sleep(wait);
+            wait = INTERVAL;
             let state = app.state::<AppState>();
             // 한 번 읽은 시각으로 날짜와 마감 여부를 함께 판단한다 (자정 경계에서 어긋나지 않게)
             let at = now();
@@ -58,9 +74,7 @@ pub fn spawn_due_alerts(app: AppHandle) {
                 continue;
             }
             if alerts_on {
-                for item in &fresh {
-                    let _ = app.notification().builder().title("G-routine").body(alert_text(item)).show();
-                }
+                let _ = app.notification().builder().title("G-routine").body(alert_summary(&fresh)).show();
             }
             let _ = app.emit(DATA_CHANGED, ());
         }
@@ -100,6 +114,23 @@ mod tests {
         assert!(t.take_new("2026-10-05", vec![item(1, "A", Some("09:00"))]).is_empty());
         // 다음 업무일에는 다시 알린다
         assert_eq!(ids(t.take_new("2026-10-06", vec![item(1, "A", Some("09:00"))])), vec![1]);
+    }
+
+    #[test]
+    fn several_overdue_items_become_one_notification() {
+        let items = vec![item(1, "출결 확인", Some("09:00")), item(2, "공문 확인", Some("10:00")), item(3, "누가기록", None)];
+        assert_eq!(alert_summary(&items), "마감 시각이 지난 일이 3개 있어요: 출결 확인, 공문 확인, 누가기록");
+    }
+
+    #[test]
+    fn a_single_overdue_item_keeps_the_detailed_text() {
+        assert_eq!(alert_summary(&[item(1, "출결 확인", Some("09:00"))]), "‘출결 확인’ 마감 시각(09:00)이 지났어요.");
+    }
+
+    #[test]
+    fn the_first_check_waits_longer_than_the_regular_interval() {
+        assert!(FIRST_CHECK >= Duration::from_secs(120));
+        assert!(FIRST_CHECK > INTERVAL);
     }
 
     #[test]

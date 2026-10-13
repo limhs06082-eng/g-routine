@@ -214,3 +214,12 @@ pub fn resize_widget(app: AppHandle, height: f64, width: Option<f64>) -> AppResu
 pub fn hide_widget(app: AppHandle) {
     window::hide_widget(&app);
 }
+
+/// 위젯의 '지금 설치' 버튼. 받아서 설치하는 동안 앱이 꺼졌다 다시 켜진다.
+#[tauri::command]
+pub async fn install_update(app: AppHandle) -> AppResult<()> {
+    shell::update::install_now(&app)
+        .await
+        .map(|_| ())
+        .map_err(|e| AppError::invalid(format!("새 버전을 설치하지 못했어요. 잠시 후 다시 시도해 주세요 ({e})")))
+}
