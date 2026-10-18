@@ -1203,6 +1203,7 @@ name = "g-routine"
 version = "0.3.0"
 dependencies = [
  "chrono",
+ "log",
  "reqwest",
  "rusqlite",
  "rustls",
@@ -1220,7 +1221,7 @@ dependencies = [
  "tempfile",
  "webview2-com",
  "windows-core",
- "windows-sys 0.45.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

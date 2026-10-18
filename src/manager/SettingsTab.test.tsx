@@ -11,6 +11,7 @@ const apiMock = vi.hoisted(() => ({
   exportBackup: vi.fn(),
   importBackup: vi.fn(),
   setVacation: vi.fn(),
+  saveDiagnostics: vi.fn(),
   holidayCoverage: vi.fn(() => Promise.resolve({ lastYear: 2027, state: "ok" })),
 }));
 
@@ -33,6 +34,7 @@ const status: AppStatus = {
   dataDir: "D:\\G-routine\\data",
   shortcut: true,
   pendingUpdate: null,
+  autostartFailed: false,
 };
 
 function renderTab() {
@@ -159,4 +161,19 @@ test("the holiday row says how far the table goes and warns when it runs out", a
   expect(holidayHint({ lastYear: 2027, state: "endingSoon" })).toBe("2028년 공휴일 정보가 아직 없어요. 발표되면 인터넷으로 자동으로 받아요");
   expect(holidayHint({ lastYear: 2027, state: "missing" })).toMatch(/올해 공휴일 정보가 아직 없어서/);
   expect(holidayHint(null)).toBe("설날 · 추석 · 대체공휴일 등");
+});
+
+test("diagnostics are saved where the teacher picks", async () => {
+  const user = userEvent.setup();
+  dialogMock.save.mockResolvedValue("C:\\Users\\t\\보고.txt");
+  apiMock.saveDiagnostics.mockResolvedValue(undefined);
+  render(<SettingsTab settings={settings} status={status} onChange={vi.fn()} />);
+  await user.click(screen.getByRole("button", { name: "문제 보고용 정보 저장" }));
+  expect(apiMock.saveDiagnostics).toHaveBeenCalledWith("C:\\Users\\t\\보고.txt");
+  expect(await screen.findByText("문제 보고용 정보를 저장했어요. 이 파일을 보내 주세요")).toBeInTheDocument();
+});
+
+test("a failed autostart registration is explained", () => {
+  render(<SettingsTab settings={settings} status={{ ...status, autostartFailed: true }} onChange={vi.fn()} />);
+  expect(screen.getByText(/자동 시작을 등록하지 못했어요/)).toBeInTheDocument();
 });

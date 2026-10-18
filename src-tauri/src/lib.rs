@@ -1,7 +1,9 @@
 mod commands;
 mod db;
+mod diagnostics;
 mod domain;
 mod error;
+mod logging;
 mod model;
 mod service;
 mod shell;
@@ -33,20 +35,38 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            if let Ok(dir) = app.path().app_local_data_dir() {
+                logging::init(dir.join("logs"));
+            }
+            log::info!("G-routine {} 시작", app.package_info().version);
             let location_file = app.path().app_config_dir()?.join("location.json");
-            let exe_dir = std::env::current_exe()?
-                .parent()
-                .map(|p| p.to_path_buf())
-                .unwrap_or_default();
+            let exe_dir = std::env::current_exe()?.parent().map(|p| p.to_path_buf()).unwrap_or_default();
             let state = state::AppState::new(location_file, exe_dir.clone());
             startup::boot(&state, &exe_dir, &storage::location::drive_candidates(), now());
+            let status = state.status();
+            log::info!(
+                "시작 상태: 준비={} 포터블={} 손상={} 열기실패={} 예전폴더못찾음={}",
+                status.ready,
+                status.portable,
+                status.corrupt,
+                status.open_failed,
+                status.previous_dir.is_some()
+            );
+            if let Some(dir) = state.data_dir() {
+                logging::use_dir(dir.join("logs"));
+            }
             app.manage(state);
             shell::startup(app.handle())?;
             shell::update::spawn_update_checker(app.handle().clone());
-            shell::alerts::spawn_due_alerts(app.handle().clone());
             shell::holidays::load_cached(app.handle());
-            shell::holidays::spawn_holiday_refresher(app.handle().clone());
+            shell::ticker::spawn(
+                app.handle().clone(),
+                vec![shell::window::day_watch_job(), shell::alerts::job(), shell::holidays::job()],
+            );
             let shortcut = shell::shortcut::register(app.handle());
+            if !shortcut {
+                log::warn!("Ctrl+Alt+G 단축키를 등록하지 못했어요 (다른 프로그램이 쓰는 중일 수 있음)");
+            }
             app.state::<state::AppState>().shortcut.store(shortcut, std::sync::atomic::Ordering::Relaxed);
             Ok(())
         })
@@ -71,6 +91,7 @@ pub fn run() {
             commands::set_setting,
             commands::set_vacation,
             commands::holiday_coverage,
+            commands::save_diagnostics,
             commands::open_link,
             commands::export_backup,
             commands::import_backup,

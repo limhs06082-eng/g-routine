@@ -25,6 +25,7 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+log = "0.4"
 rusqlite = { version = "0.40", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
 tauri-plugin-updater = "2"
@@ -34,7 +35,7 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls-no-p
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.45", features = ["Win32_Storage_FileSystem"] }
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 # 위젯을 숨겼을 때 WebView2 메모리 절약 모드(Tauri가 쓰는 버전과 맞춤)
 webview2-com = "0.39"
 windows-core = "0.62"

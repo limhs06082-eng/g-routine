@@ -102,6 +102,8 @@ export interface AppStatus {
   shortcut: boolean;
   /** 주기 확인에서 찾았지만 아직 설치하지 않은 새 버전. 위젯이 '지금 설치'를 보여 준다 */
   pendingUpdate: string | null;
+  /** 컴퓨터 켜면 자동 시작 등록(또는 해제)이 실패했는지 (학교 보안 정책 등) */
+  autostartFailed: boolean;
 }
 
 export interface DataDirInfo {
@@ -130,6 +132,8 @@ export const api = {
   setSetting: (key: SettingKey, value: string) => invoke<Settings>("set_setting", { key, value }),
   /** 방학 기간을 정하거나(시작일·끝나는 날) 둘 다 null로 해제한다 */
   setVacation: (start: string | null, end: string | null) => invoke<Settings>("set_vacation", { start, end }),
+  /** 문제 보고용 정보(상태 · 설정 · 데이터 개수 · 최근 로그)를 글 파일로 저장한다 */
+  saveDiagnostics: (path: string) => invoke<void>("save_diagnostics", { path }),
   holidayCoverage: () => invoke<HolidayCoverage>("holiday_coverage"),
   openLink: (routineId: number) => invoke<void>("open_link", { routineId }),
   exportBackup: (path: string) => invoke<void>("export_backup", { path }),

@@ -33,14 +33,7 @@ pub fn fit_height(y: i32, old_h: i32, wanted_h: i32, min_h: i32, work: Rect, mar
 
 /// 창 크기(w, h)에 맞는 좌상단 좌표. 저장 위치(x, 아래쪽 y)가 화면 안이면 그것을, 아니면 작업 영역 우측 하단을 쓴다.
 /// 모니터 이동으로 DPI가 바뀌어 창 크기가 달라지면 새 크기로 다시 호출한다.
-pub fn compute_position(
-    saved: Option<(i32, i32)>,
-    w: i32,
-    h: i32,
-    monitors: &[Rect],
-    work: Rect,
-    margin: i32,
-) -> (i32, i32) {
+pub fn compute_position(saved: Option<(i32, i32)>, w: i32, h: i32, monitors: &[Rect], work: Rect, margin: i32) -> (i32, i32) {
     match saved {
         Some((x, bottom)) if center_inside(x, bottom - h, w, h, monitors) => (x, bottom - h),
         _ => bottom_right(work, w, h, margin),
@@ -99,7 +92,7 @@ mod tests {
     fn recompute_after_dpi_rescale_keeps_edges_inside_work_area() {
         let work = Rect { x: 0, y: 0, w: 1920, h: 1032 };
         let margin = 18; // 150% 배율
-        // 100% 모니터 기준 크기로 먼저 배치
+                         // 100% 모니터 기준 크기로 먼저 배치
         let (x0, y0) = compute_position(None, 280, 400, &[FHD], work, margin);
         assert_eq!((x0 + 280, y0 + 400), (1920 - margin, 1032 - margin));
         // 150% 모니터로 옮겨져 창이 420x600으로 커진 뒤 다시 계산

@@ -51,6 +51,7 @@ pub fn open(path: &Path) -> AppResult<Connection> {
     Ok(conn)
 }
 
+#[cfg(test)]
 pub fn open_in_memory() -> AppResult<Connection> {
     let conn = Connection::open_in_memory()?;
     prepare(&conn)?;

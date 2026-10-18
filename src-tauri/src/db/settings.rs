@@ -5,7 +5,30 @@ use crate::error::{AppError, AppResult};
 use crate::model::Settings;
 
 pub const THEMES: [&str; 5] = ["lavender", "mint", "peach", "sky", "lemon"];
-const BOOL_KEYS: [&str; 6] = ["always_on_top", "autostart", "hide_weekends", "due_alerts", "hide_holidays", "mini_mode"];
+
+// ---- 설정 키는 모두 여기에서 정한다 ----
+
+/// 켜고 끄는 설정 (화면에서 바꾼다)
+pub const BOOL_KEYS: [&str; 6] = ["always_on_top", "autostart", "hide_weekends", "due_alerts", "hide_holidays", "mini_mode"];
+pub const DAY_START_HOUR: &str = "day_start_hour";
+pub const THEME: &str = "theme";
+/// 화면이 set_setting으로 바꿀 수 있는 키. src/lib/api.ts의 SettingKey와 같아야 한다 (테스트로 확인).
+pub const USER_KEYS: [&str; 9] =
+    [BOOL_KEYS[0], BOOL_KEYS[1], BOOL_KEYS[2], BOOL_KEYS[3], BOOL_KEYS[4], BOOL_KEYS[5], DAY_START_HOUR, THEME, SEEN_VERSION];
+/// 방학 기간 (set_vacation으로 둘을 함께 바꾼다)
+pub const VACATION_START: &str = "vacation_start";
+pub const VACATION_END: &str = "vacation_end";
+/// 위젯 위치 (화면 아래 모서리 기준)
+pub const WINDOW_X: &str = "window_x";
+pub const WINDOW_BOTTOM: &str = "window_bottom";
+/// 지금까지 맞춘 가장 늦은 업무일 (db::day_items)
+pub const SYNCED_DAY: &str = "synced_day";
+/// 내려받은 공휴일 표 (shell::holidays)
+pub const HOLIDAYS_CACHE: &str = "holidays_cache";
+/// 이 PC에만 해당하는 키: 백업 파일에 넣지 않는다
+pub const PC_ONLY_KEYS: [&str; 5] = [WINDOW_X, WINDOW_BOTTOM, SYNCED_DAY, HOLIDAYS_CACHE, SEEN_VERSION];
+/// 백업을 불러와도 지우지 않는 키 (synced_day는 지우고 불러온 기록에서 다시 정한다)
+pub const KEPT_ON_IMPORT: [&str; 4] = [WINDOW_X, WINDOW_BOTTOM, HOLIDAYS_CACHE, SEEN_VERSION];
 
 pub fn get(c: &Connection, key: &str) -> AppResult<Option<String>> {
     Ok(c.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0)).optional()?)
@@ -17,11 +40,6 @@ pub fn set(c: &Connection, key: &str, value: &str) -> AppResult<()> {
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         params![key, value],
     )?;
-    Ok(())
-}
-
-fn remove(c: &Connection, key: &str) -> AppResult<()> {
-    c.execute("DELETE FROM settings WHERE key = ?1", [key])?;
     Ok(())
 }
 
@@ -37,16 +55,11 @@ pub fn load(c: &Connection) -> AppResult<Settings> {
         due_alerts: get_bool(c, "due_alerts", true)?,
         hide_holidays: get_bool(c, "hide_holidays", true)?,
         mini_mode: get_bool(c, "mini_mode", false)?,
-        vacation_start: get(c, "vacation_start")?.filter(|d| parse_day(d).is_some()),
-        vacation_end: get(c, "vacation_end")?.filter(|d| parse_day(d).is_some()),
-        day_start_hour: get(c, "day_start_hour")?
-            .and_then(|v| v.parse::<u32>().ok())
-            .filter(|h| *h < 24)
-            .unwrap_or(4),
+        vacation_start: get(c, VACATION_START)?.filter(|d| parse_day(d).is_some()),
+        vacation_end: get(c, VACATION_END)?.filter(|d| parse_day(d).is_some()),
+        day_start_hour: get(c, DAY_START_HOUR)?.and_then(|v| v.parse::<u32>().ok()).filter(|h| *h < 24).unwrap_or(4),
         seen_version: get(c, SEEN_VERSION)?.filter(|v| is_version(v)),
-        theme: get(c, "theme")?
-            .filter(|t| THEMES.contains(&t.as_str()))
-            .unwrap_or_else(|| "lavender".into()),
+        theme: get(c, THEME)?.filter(|t| THEMES.contains(&t.as_str())).unwrap_or_else(|| "lavender".into()),
     })
 }
 
@@ -68,14 +81,17 @@ fn is_version(v: &str) -> bool {
 
 /// 사용자가 바꿀 수 있는 설정만 검증 후 저장한다.
 pub fn apply(c: &Connection, key: &str, value: &str) -> AppResult<()> {
+    if !USER_KEYS.contains(&key) {
+        return Err(AppError::invalid("알 수 없는 설정이에요"));
+    }
     if key == SEEN_VERSION {
         return apply_seen_version(c, value);
     }
     let valid = if BOOL_KEYS.contains(&key) {
         value == "true" || value == "false"
-    } else if key == "day_start_hour" {
+    } else if key == DAY_START_HOUR {
         value.parse::<u32>().map(|h| h < 24).unwrap_or(false)
-    } else if key == "theme" {
+    } else if key == THEME {
         THEMES.contains(&value)
     } else {
         return Err(AppError::invalid("알 수 없는 설정이에요"));
@@ -98,8 +114,8 @@ fn apply_seen_version(c: &Connection, value: &str) -> AppResult<()> {
 }
 
 pub fn window_pos(c: &Connection) -> AppResult<Option<(i32, i32)>> {
-    let x = get(c, "window_x")?.and_then(|v| v.parse().ok());
-    let y = get(c, "window_bottom")?.and_then(|v| v.parse().ok());
+    let x = get(c, WINDOW_X)?.and_then(|v| v.parse().ok());
+    let y = get(c, WINDOW_BOTTOM)?.and_then(|v| v.parse().ok());
     Ok(x.zip(y))
 }
 
@@ -110,12 +126,12 @@ pub fn set_window_pos(c: &Connection, x: i32, y: i32) -> AppResult<()> {
     tx.execute(
         "INSERT INTO settings (key, value) VALUES (?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        params!["window_x", x_str],
+        params![WINDOW_X, x_str],
     )?;
     tx.execute(
         "INSERT INTO settings (key, value) VALUES (?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        params!["window_bottom", y_str],
+        params![WINDOW_BOTTOM, y_str],
     )?;
     tx.commit()?;
     Ok(())
@@ -126,8 +142,8 @@ pub fn set_vacation(c: &Connection, range: Option<(&str, &str)>) -> AppResult<()
     let tx = c.unchecked_transaction()?;
     match range {
         Some((start, end)) => {
-            set(&tx, "vacation_start", start)?;
-            set(&tx, "vacation_end", end)?;
+            set(&tx, VACATION_START, start)?;
+            set(&tx, VACATION_END, end)?;
         }
         None => {
             tx.execute("DELETE FROM settings WHERE key IN ('vacation_start', 'vacation_end')", [])?;
@@ -139,8 +155,8 @@ pub fn set_vacation(c: &Connection, range: Option<(&str, &str)>) -> AppResult<()
 
 pub fn clear_window_pos(c: &Connection) -> AppResult<()> {
     let tx = c.unchecked_transaction()?;
-    tx.execute("DELETE FROM settings WHERE key = ?1", ["window_x"])?;
-    tx.execute("DELETE FROM settings WHERE key = ?1", ["window_bottom"])?;
+    tx.execute("DELETE FROM settings WHERE key = ?1", [WINDOW_X])?;
+    tx.execute("DELETE FROM settings WHERE key = ?1", [WINDOW_BOTTOM])?;
     tx.commit()?;
     Ok(())
 }
@@ -187,6 +203,33 @@ mod tests {
         assert!(apply(&c, "day_start_hour", "24").is_err());
         assert!(apply(&c, "theme", "black").is_err());
         assert!(apply(&c, "window_x", "10").is_err());
+    }
+
+    #[test]
+    fn user_keys_match_the_frontend_setting_key_type() {
+        let api = include_str!("../../../src/lib/api.ts");
+        let line = api.lines().find(|l| l.starts_with("export type SettingKey =")).expect("SettingKey 타입");
+        let mut ts: Vec<&str> = line
+            .trim_start_matches("export type SettingKey =")
+            .trim_end_matches(';')
+            .split('|')
+            .map(|k| k.trim().trim_matches('"'))
+            .collect();
+        let mut rust = USER_KEYS.to_vec();
+        ts.sort_unstable();
+        rust.sort_unstable();
+        assert_eq!(ts, rust, "src/lib/api.ts의 SettingKey와 USER_KEYS가 달라요");
+        // 바꿀 수 있는 키는 모두 apply가 받아 준다
+        let c = open_in_memory().unwrap();
+        for key in USER_KEYS {
+            let value = match key {
+                DAY_START_HOUR => "5",
+                THEME => "mint",
+                SEEN_VERSION => "1.0.0",
+                _ => "true",
+            };
+            apply(&c, key, value).unwrap_or_else(|e| panic!("{key}: {e}"));
+        }
     }
 
     #[test]

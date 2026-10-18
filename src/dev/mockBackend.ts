@@ -114,7 +114,7 @@ function historyDay(day: string): DayItem[] {
 }
 
 function status(): AppStatus {
-  return { ready, corrupt: false, openFailed: false, portable: false, previousDir: null, suggestedDir: DATA_DIR, dataDir: ready ? DATA_DIR : null, shortcut: true, pendingUpdate: new URLSearchParams(window.location.search).get("update") };
+  return { ready, corrupt: false, openFailed: false, portable: false, previousDir: null, suggestedDir: DATA_DIR, dataDir: ready ? DATA_DIR : null, shortcut: true, autostartFailed: false, pendingUpdate: new URLSearchParams(window.location.search).get("update") };
 }
 
 function changed() {
@@ -213,6 +213,9 @@ export function installMockBackend() {
         changed();
         return settings;
       }
+      case "save_diagnostics":
+        console.info("[mock] save_diagnostics", args.path);
+        return null;
       case "holiday_coverage":
         return { lastYear: 2027, state: "ok" };
       case "set_vacation":

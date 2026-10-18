@@ -29,11 +29,8 @@ fn shows_on_rest_day(r: &Routine, rest: RestKind) -> bool {
 /// 그날 해야 할 루틴 (정렬: sort_order, id).
 /// rest는 쉬는 날의 이유 (domain::rest가 정한다). 쉬는 날에는 `shows_on_rest_day`인 루틴만 남긴다.
 pub fn scheduled(routines: &[Routine], day: NaiveDate, rest: Option<RestKind>) -> Vec<&Routine> {
-    let mut list: Vec<&Routine> = routines
-        .iter()
-        .filter(|r| applies(r, day))
-        .filter(|r| rest.is_none_or(|kind| shows_on_rest_day(r, kind)))
-        .collect();
+    let mut list: Vec<&Routine> =
+        routines.iter().filter(|r| applies(r, day)).filter(|r| rest.is_none_or(|kind| shows_on_rest_day(r, kind))).collect();
     list.sort_by_key(|r| (r.sort_order, r.id));
     list
 }
@@ -77,7 +74,8 @@ mod tests {
         let weekday: Vec<&str> = scheduled(&all, date("2026-10-05"), None).iter().map(|r| r.title.as_str()).collect();
         assert_eq!(weekday, vec!["B", "A"]);
 
-        let saturday: Vec<&str> = scheduled(&all, date("2026-10-10"), Some(RestKind::Weekend)).iter().map(|r| r.title.as_str()).collect();
+        let saturday: Vec<&str> =
+            scheduled(&all, date("2026-10-10"), Some(RestKind::Weekend)).iter().map(|r| r.title.as_str()).collect();
         assert_eq!(saturday, vec!["주말 할 일"]);
 
         let saturday_shown: Vec<&str> = scheduled(&all, date("2026-10-10"), None).iter().map(|r| r.title.as_str()).collect();

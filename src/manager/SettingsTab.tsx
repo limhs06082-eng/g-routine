@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Download, FolderOpen, Info, Upload } from "lucide-react";
+import { Download, FileText, FolderOpen, Info, Upload } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/button";
@@ -97,6 +97,13 @@ export function SettingsTab({ settings, status, onChange }: Props) {
       await api.exportBackup(path);
     }, "백업 파일을 저장했어요");
 
+  const saveDiagnostics = () =>
+    run(async () => {
+      const path = await save({ defaultPath: `g-routine-문제보고-${todayString()}.txt`, filters: [{ name: "글 파일", extensions: ["txt"] }] });
+      if (!path) return false;
+      await api.saveDiagnostics(path);
+    }, "문제 보고용 정보를 저장했어요. 이 파일을 보내 주세요");
+
   const importBackup = () =>
     run(async () => {
       const path = await open({ multiple: false, directory: false, filters: JSON_FILTER });
@@ -129,7 +136,11 @@ export function SettingsTab({ settings, status, onChange }: Props) {
           Ctrl+Alt+G
         </kbd>
       </Row>
-      <Row label="컴퓨터 켜면 자동 시작">
+      <Row
+        label="컴퓨터 켜면 자동 시작"
+        hint={status.autostartFailed ? "이 PC에서는 자동 시작을 등록하지 못했어요. 학교 보안 프로그램이 막았을 수 있어요" : undefined}
+        warn={status.autostartFailed}
+      >
         <Switch aria-label="컴퓨터 켜면 자동 시작" checked={settings.autostart} onCheckedChange={toggle("autostart")} />
       </Row>
       <Row label="주말에는 숨기기" hint="토 · 일에는 반복 루틴을 띄우지 않아요">
@@ -201,6 +212,10 @@ export function SettingsTab({ settings, status, onChange }: Props) {
         <Button variant="outline" size="sm" onClick={() => void importBackup()}>
           <Upload />
           불러오기
+        </Button>
+        <Button variant="ghost" size="sm" className="ml-auto" title="문제가 생겼을 때 상태와 최근 기록을 파일로 저장해요 (루틴 이름은 들어가지 않아요)" onClick={() => void saveDiagnostics()}>
+          <FileText />
+          문제 보고용 정보 저장
         </Button>
       </div>
       {message && (

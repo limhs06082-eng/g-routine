@@ -1,14 +1,14 @@
 use chrono::{NaiveDate, NaiveDateTime};
 use rusqlite::Connection;
 
+use crate::db::{day_items, routines, settings};
 use crate::domain::day::{business_day, fmt_day, fmt_ts, parse_day};
 use crate::domain::due;
 use crate::domain::rest::{rest_day, RestRules};
-use crate::db::{day_items, routines, settings};
 use crate::error::{AppError, AppResult};
-use crate::model::{DayItem, DaySummary, RepeatType, Routine, RoutineInput, Settings, TodayView};
 #[cfg(test)]
 use crate::model::Slot;
+use crate::model::{DayItem, DaySummary, RepeatType, Routine, RoutineInput, Settings, TodayView};
 
 /// 지금의 업무일 (하루 시작 시각을 늦춰도 어제로 돌아가지 않는다: `day_items::effective_day`)
 fn current_day(c: &Connection, s: &Settings, now: NaiveDateTime) -> AppResult<NaiveDate> {
@@ -39,9 +39,8 @@ pub fn get_today(c: &Connection, now: NaiveDateTime) -> AppResult<TodayView> {
     let day = current_day(c, &s, now)?;
     let rest = rest_day(day, &rest_rules(&s));
     day_items::sync_day(c, day, rest.as_ref().map(|r| r.kind))?;
-    let (done, mut pending): (Vec<DayItem>, Vec<DayItem>) = day_items::items_for_day(c, &fmt_day(day))?
-        .into_iter()
-        .partition(|i| i.completed_at.is_some());
+    let (done, mut pending): (Vec<DayItem>, Vec<DayItem>) =
+        day_items::items_for_day(c, &fmt_day(day))?.into_iter().partition(|i| i.completed_at.is_some());
     let late: Vec<i64> = due::overdue(&pending, day, now, s.day_start_hour).iter().map(|i| i.id).collect();
     for item in &mut pending {
         item.overdue = late.contains(&item.id);
@@ -74,10 +73,7 @@ pub fn overdue_items(c: &Connection, now: NaiveDateTime) -> AppResult<Vec<DayIte
     let s = settings::load(c)?;
     let day = current_day(c, &s, now)?;
     let items = day_items::items_for_day(c, &fmt_day(day))?;
-    Ok(due::overdue(&items, day, now, s.day_start_hour)
-        .into_iter()
-        .map(|i| DayItem { overdue: true, ..i.clone() })
-        .collect())
+    Ok(due::overdue(&items, day, now, s.day_start_hour).into_iter().map(|i| DayItem { overdue: true, ..i.clone() }).collect())
 }
 
 pub fn set_done(c: &Connection, item_id: i64, done: bool, now: NaiveDateTime) -> AppResult<()> {
@@ -144,7 +140,8 @@ pub fn history_day(c: &Connection, day: &str) -> AppResult<Vec<DayItem>> {
 
 pub fn set_setting(c: &Connection, key: &str, value: &str, now: NaiveDateTime) -> AppResult<Settings> {
     settings::apply(c, key, value)?;
-    if key == "hide_weekends" || key == "hide_holidays" || key == "day_start_hour" {
+    // 오늘 할 일이 달라지는 설정은 바로 다시 맞춘다
+    if key == "hide_weekends" || key == "hide_holidays" || key == settings::DAY_START_HOUR {
         resync_today(c, now)?;
     }
     settings::load(c)
@@ -552,5 +549,26 @@ mod tests {
         let v = get_today(&c, at(SAT)).unwrap();
         assert_eq!(v.rest.map(|r| r.kind), Some(RestKind::Weekend));
         assert_eq!(titles(&v.pending), vec!["토요 방과후 지도"]);
+    }
+
+    fn total_changes(c: &rusqlite::Connection) -> i64 {
+        c.query_row("SELECT total_changes()", [], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn reading_today_again_writes_nothing() {
+        let c = open_in_memory().unwrap();
+        create_routine(&c, input_daily("출결 확인"), at(MON)).unwrap();
+        get_today(&c, at(MON)).unwrap();
+        let before = total_changes(&c);
+        for _ in 0..3 {
+            get_today(&c, at("2026-10-12 10:00")).unwrap();
+        }
+        assert_eq!(total_changes(&c), before, "바뀐 것이 없으면 DB에 쓰지 않아야 한다");
+        // 이름을 바꾸면 그때만 쓴다
+        let id = list_routines(&c, at(MON)).unwrap()[0].id;
+        update_routine(&c, id, input_daily("출결 확인 (NEIS)"), at(MON)).unwrap();
+        assert!(total_changes(&c) > before);
+        assert_eq!(titles(&get_today(&c, at(MON)).unwrap().pending), vec!["출결 확인 (NEIS)"]);
     }
 }

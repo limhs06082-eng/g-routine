@@ -28,7 +28,10 @@ if (-not $repo) { Fail "GitHub 저장소를 찾지 못했어요 (gh auth / origi
 # 0. 테스트 (하나라도 실패하면 아무것도 바꾸지 않고 멈춘다)
 #    화면 빌드는 타입 검사(tsc)를 포함하고, cargo test가 요구하는 dist 폴더도 만든다.
 Run "화면 빌드 · 타입 검사" { npm run build }
+Run "화면 코드 검사" { npm run lint }
 Run "화면 테스트" { npm test }
+Run "Rust 코드 모양 검사" { cargo fmt --manifest-path src-tauri/Cargo.toml --check }
+Run "Rust 코드 검사" { cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings }
 Run "규칙 · 저장 테스트" { cargo test --manifest-path src-tauri/Cargo.toml }
 
 # 1. 버전 반영 (package.json + package-lock.json, tauri.conf.json, Cargo.toml)

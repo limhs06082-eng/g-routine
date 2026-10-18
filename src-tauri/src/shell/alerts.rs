@@ -5,11 +5,12 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::db::settings;
 use crate::model::DayItem;
+use crate::shell::ticker::Job;
 use crate::state::AppState;
 use crate::{now, service, DATA_CHANGED};
 
@@ -53,32 +54,30 @@ pub fn alert_summary(items: &[DayItem]) -> String {
     }
 }
 
-pub fn spawn_due_alerts(app: AppHandle) {
-    std::thread::spawn(move || {
-        let mut tracker = AlertTracker::default();
-        let mut wait = FIRST_CHECK;
-        loop {
-            std::thread::sleep(wait);
-            wait = INTERVAL;
-            let state = app.state::<AppState>();
-            // 한 번 읽은 시각으로 날짜와 마감 여부를 함께 판단한다 (자정 경계에서 어긋나지 않게)
-            let at = now();
-            let checked = state.with_conn(|c| {
-                let s = settings::load(c)?;
-                let day = crate::domain::day::fmt_day(service::today(c, at)?);
-                Ok((s.due_alerts, day, service::overdue_items(c, at)?))
-            });
-            let Ok((alerts_on, day, overdue)) = checked else { continue };
-            let fresh = tracker.take_new(&day, overdue);
-            if fresh.is_empty() {
-                continue;
-            }
-            if alerts_on {
-                let _ = app.notification().builder().title("G-routine").body(alert_summary(&fresh)).show();
-            }
-            let _ = app.emit(DATA_CHANGED, ());
+/// 마감 알림 작업 (shell::ticker가 돌린다)
+pub fn job() -> Job {
+    let mut tracker = AlertTracker::default();
+    Job::new("마감 알림", FIRST_CHECK, INTERVAL, move |app| {
+        let state = app.state::<AppState>();
+        // 한 번 읽은 시각으로 날짜와 마감 여부를 함께 판단한다 (자정 경계에서 어긋나지 않게)
+        let at = now();
+        let checked = state.with_conn(|c| {
+            let s = settings::load(c)?;
+            let day = crate::domain::day::fmt_day(service::today(c, at)?);
+            Ok((s.due_alerts, day, service::overdue_items(c, at)?))
+        });
+        let Ok((alerts_on, day, overdue)) = checked else { return };
+        let fresh = tracker.take_new(&day, overdue);
+        if fresh.is_empty() {
+            return;
         }
-    });
+        if alerts_on {
+            if let Err(e) = app.notification().builder().title("G-routine").body(alert_summary(&fresh)).show() {
+                log::warn!("마감 알림을 띄우지 못했어요: {e}");
+            }
+        }
+        let _ = app.emit(DATA_CHANGED, ());
+    })
 }
 
 #[cfg(test)]

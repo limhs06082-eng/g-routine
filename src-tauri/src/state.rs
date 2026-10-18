@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -21,6 +21,8 @@ pub struct AppStatus {
     pub data_dir: Option<String>,
     /// 전역 단축키(Ctrl+Alt+G)를 등록했는지. 다른 프로그램이 쓰고 있으면 false.
     pub shortcut: bool,
+    /// 컴퓨터 켜면 자동 시작 등록(또는 해제)이 실패했는지
+    pub autostart_failed: bool,
     /// 내려받을 수 있는 새 버전 (주기 확인에서 찾았지만 아직 설치하지 않음). 위젯이 '지금 설치'를 보여 준다.
     pub pending_update: Option<String>,
 }
@@ -31,10 +33,14 @@ pub struct AppState {
     pub location_file: PathBuf,
     /// 실행 파일 폴더 (포터블 모드 판단 · 다시 시도에 쓴다)
     pub exe_dir: PathBuf,
-    pub move_seq: AtomicU64,
+    /// 끌어서 옮긴 위젯 위치 (x, 아래쪽 y, 옮긴 때). 잠시 멈추면 저장한다.
+    pub pending_pos: Mutex<Option<(i32, i32, Instant)>>,
+    /// 위치 저장 스레드가 돌고 있는지 (하나만 돈다)
+    pub pos_saver_running: AtomicBool,
     pub programmatic_move: Mutex<Option<Instant>>,
     /// 시작 과정(boot)이 상태를 통째로 다시 쓰므로 단축키 등록 결과는 따로 둔다
     pub shortcut: AtomicBool,
+    pub autostart_failed: AtomicBool,
     /// 설치를 기다리는 새 버전 (같은 이유로 따로 둔다)
     pending_update: Mutex<Option<String>>,
 }
@@ -46,9 +52,11 @@ impl AppState {
             status: Mutex::new(AppStatus::default()),
             location_file,
             exe_dir,
-            move_seq: AtomicU64::new(0),
+            pending_pos: Mutex::new(None),
+            pos_saver_running: AtomicBool::new(false),
             programmatic_move: Mutex::new(None),
             shortcut: AtomicBool::new(false),
+            autostart_failed: AtomicBool::new(false),
             pending_update: Mutex::new(None),
         }
     }
@@ -87,6 +95,7 @@ impl AppState {
     pub fn status(&self) -> AppStatus {
         let mut s = self.status.lock().map(|s| s.clone()).unwrap_or_default();
         s.shortcut = self.shortcut.load(Ordering::Relaxed);
+        s.autostart_failed = self.autostart_failed.load(Ordering::Relaxed);
         s.pending_update = self.pending_update.lock().ok().and_then(|g| g.clone());
         s
     }

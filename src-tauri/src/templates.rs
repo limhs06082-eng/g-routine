@@ -1,8 +1,8 @@
 use chrono::NaiveDateTime;
 use rusqlite::Connection;
 
-use crate::domain::day::fmt_ts;
 use crate::db::routines;
+use crate::domain::day::fmt_ts;
 use crate::error::{AppError, AppResult};
 use crate::model::{RepeatType, RoutineInput, Slot};
 

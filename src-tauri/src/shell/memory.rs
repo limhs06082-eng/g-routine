@@ -10,16 +10,12 @@ pub fn set_low_memory(window: &WebviewWindow, low: bool) {
     {
         let _ = window.with_webview(move |webview| {
             use webview2_com::Microsoft::Web::WebView2::Win32::{
-                ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
-                COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+                ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
             };
             use windows_core::Interface;
 
-            let level = if low {
-                COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
-            } else {
-                COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
-            };
+            let level =
+                if low { COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW } else { COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL };
             // SAFETY: Tauri가 넘겨준 살아 있는 WebView2 컨트롤러에서 COM 메서드를 호출할 뿐이다.
             unsafe {
                 if let Ok(core) = webview.controller().CoreWebView2() {

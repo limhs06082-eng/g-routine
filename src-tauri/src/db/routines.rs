@@ -27,9 +27,7 @@ fn from_row(r: &Row) -> rusqlite::Result<Routine> {
 }
 
 pub fn list_unarchived(c: &Connection) -> AppResult<Vec<Routine>> {
-    let mut st = c.prepare(&format!(
-        "SELECT {COLS} FROM routines WHERE archived_at IS NULL ORDER BY sort_order, id"
-    ))?;
+    let mut st = c.prepare(&format!("SELECT {COLS} FROM routines WHERE archived_at IS NULL ORDER BY sort_order, id"))?;
     let rows = st.query_map([], from_row)?.collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
 }
@@ -93,10 +91,7 @@ pub fn update(c: &Connection, id: i64, input: &RoutineInput) -> AppResult<()> {
 }
 
 pub fn archive(c: &Connection, id: i64, now: &str) -> AppResult<()> {
-    let n = c.execute(
-        "UPDATE routines SET archived_at = ?2 WHERE id = ?1 AND archived_at IS NULL",
-        params![id, now],
-    )?;
+    let n = c.execute("UPDATE routines SET archived_at = ?2 WHERE id = ?1 AND archived_at IS NULL", params![id, now])?;
     if n == 0 {
         return Err(AppError::invalid("루틴을 찾을 수 없어요"));
     }
@@ -146,9 +141,7 @@ pub fn validate(input: RoutineInput) -> AppResult<RoutineInput> {
         None | Some("") => None,
         Some(l) => {
             if !is_allowed_link(l) {
-                return Err(AppError::invalid(
-                    "바로가기는 https:// 주소나 C:\\ 같은 프로그램 경로만 넣을 수 있어요",
-                ));
+                return Err(AppError::invalid("바로가기는 https:// 주소나 C:\\ 같은 프로그램 경로만 넣을 수 있어요"));
             }
             Some(l.to_string())
         }
@@ -163,11 +156,7 @@ pub fn validate(input: RoutineInput) -> AppResult<RoutineInput> {
             (w, None)
         }
         RepeatType::Once => {
-            let d = input
-                .once_date
-                .as_deref()
-                .and_then(parse_day)
-                .ok_or_else(|| AppError::invalid("날짜를 골라 주세요"))?;
+            let d = input.once_date.as_deref().and_then(parse_day).ok_or_else(|| AppError::invalid("날짜를 골라 주세요"))?;
             (0, Some(fmt_day(d)))
         }
     };
@@ -224,7 +213,13 @@ mod tests {
 
     #[test]
     fn validate_normalizes_and_rejects_bad_input() {
-        let ok = validate(RoutineInput { title: "  출결 확인 ".into(), weekdays: 5, once_date: Some("2026-10-05".into()), ..input_daily("") }).unwrap();
+        let ok = validate(RoutineInput {
+            title: "  출결 확인 ".into(),
+            weekdays: 5,
+            once_date: Some("2026-10-05".into()),
+            ..input_daily("")
+        })
+        .unwrap();
         assert_eq!(ok.title, "출결 확인");
         assert_eq!((ok.weekdays, ok.once_date), (0, None));
 

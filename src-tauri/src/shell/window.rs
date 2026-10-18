@@ -7,6 +7,7 @@ use crate::db::settings;
 use crate::service;
 use crate::shell::memory::set_low_memory;
 use crate::shell::position::{compute_position, fit_height, Rect};
+use crate::shell::ticker::Job;
 use crate::state::AppState;
 use crate::{now, startup, DATA_CHANGED};
 
@@ -173,45 +174,62 @@ fn normal_left(x: i32, width: i32, normal_width: i32) -> i32 {
 /// 사용자가 끌어서 옮긴 위치만 저장한다 (프로그램 이동 직후 400ms는 무시, 500ms 디바운스).
 fn schedule_position_save(app: &AppHandle, x: i32, bottom: i32) {
     let state = app.state::<AppState>();
-    let recent = state
-        .programmatic_move
-        .lock()
-        .ok()
-        .and_then(|g| *g)
-        .map(|t| t.elapsed() < Duration::from_millis(400))
-        .unwrap_or(false);
+    let recent =
+        state.programmatic_move.lock().ok().and_then(|g| *g).map(|t| t.elapsed() < Duration::from_millis(400)).unwrap_or(false);
     if recent {
         return;
     }
-    let seq = state.move_seq.fetch_add(1, Ordering::SeqCst) + 1;
+    if let Ok(mut p) = state.pending_pos.lock() {
+        *p = Some((x, bottom, Instant::now()));
+    }
+    // 끄는 동안 이벤트가 수십 번 와도 저장 스레드는 하나만 돈다
+    if state.pos_saver_running.swap(true, Ordering::SeqCst) {
+        return;
+    }
     let app = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(500));
         let state = app.state::<AppState>();
-        if state.move_seq.load(Ordering::SeqCst) == seq {
-            let _ = state.with_conn(|c| settings::set_window_pos(c, x, bottom));
+        loop {
+            std::thread::sleep(Duration::from_millis(150));
+            let settled = state.pending_pos.lock().ok().and_then(|mut p| match *p {
+                Some((_, _, at)) if at.elapsed() >= Duration::from_millis(500) => p.take(),
+                _ => None,
+            });
+            if let Some((x, bottom, _)) = settled {
+                if let Err(e) = state.with_conn(|c| settings::set_window_pos(c, x, bottom)) {
+                    log::warn!("위젯 위치를 저장하지 못했어요: {e:?}");
+                }
+            }
+            let idle = state.pending_pos.lock().map(|p| p.is_none()).unwrap_or(true);
+            if idle {
+                state.pos_saver_running.store(false, Ordering::SeqCst);
+                // 멈추는 사이에 새로 옮겼으면 이 스레드가 이어서 맡는다
+                let moved_again = state.pending_pos.lock().map(|p| p.is_some()).unwrap_or(false);
+                if !moved_again || state.pos_saver_running.swap(true, Ordering::SeqCst) {
+                    break;
+                }
+            }
         }
     });
 }
 
-/// 30초마다 업무일을 확인해 바뀌면 백업 후 data-changed를 보낸다 (절전 복귀 포함).
-pub fn spawn_day_watcher(app: AppHandle) {
-    std::thread::spawn(move || {
-        let mut last = None;
-        loop {
-            let state = app.state::<AppState>();
-            if let Ok(day) = state.with_conn(|c| service::today(c, now())) {
-                if last.is_some() && last != Some(day) {
-                    if let Some(dir) = state.data_dir() {
-                        let _ = state.with_conn(|c| startup::run_daily_backup(c, &dir, now()));
-                    }
-                    let _ = app.emit(DATA_CHANGED, ());
+/// 30초마다 업무일을 확인해 바뀌면 백업 후 data-changed를 보낸다 (절전 복귀 포함). shell::ticker가 돌린다.
+pub fn day_watch_job() -> Job {
+    let mut last = None;
+    Job::new("날짜 감시", Duration::ZERO, Duration::from_secs(30), move |app| {
+        let state = app.state::<AppState>();
+        let Ok(day) = state.with_conn(|c| service::today(c, now())) else { return };
+        if last.is_some() && last != Some(day) {
+            log::info!("업무일이 {day}(으)로 바뀌었어요");
+            if let Some(dir) = state.data_dir() {
+                if let Err(e) = state.with_conn(|c| startup::run_daily_backup(c, &dir, now())) {
+                    log::warn!("하루 백업을 만들지 못했어요: {e:?}");
                 }
-                last = Some(day);
             }
-            std::thread::sleep(Duration::from_secs(30));
+            let _ = app.emit(DATA_CHANGED, ());
         }
-    });
+        last = Some(day);
+    })
 }
 
 #[cfg(test)]
@@ -235,12 +253,7 @@ mod tests {
     #[test]
     fn widget_and_manager_share_browser_args() {
         let conf: serde_json::Value = serde_json::from_str(include_str!("../../tauri.conf.json")).unwrap();
-        let widget = conf["app"]["windows"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|w| w["label"] == "widget")
-            .unwrap();
+        let widget = conf["app"]["windows"].as_array().unwrap().iter().find(|w| w["label"] == "widget").unwrap();
         assert_eq!(widget["additionalBrowserArgs"].as_str(), Some(BROWSER_ARGS));
     }
 

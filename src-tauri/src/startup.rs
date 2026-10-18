@@ -128,10 +128,7 @@ pub fn setup(state: &AppState, dir: &Path, template: &str, now: NaiveDateTime) -
 /// 손상된 DB를 가장 최근 자동 백업으로 되돌린다.
 pub fn restore(state: &AppState, now: NaiveDateTime) -> AppResult<()> {
     let st = state.status();
-    let dir = st
-        .previous_dir
-        .map(PathBuf::from)
-        .ok_or_else(|| AppError::invalid("복구할 폴더를 찾지 못했어요"))?;
+    let dir = st.previous_dir.map(PathBuf::from).ok_or_else(|| AppError::invalid("복구할 폴더를 찾지 못했어요"))?;
     backup::restore_latest(&dir)?;
     let conn = open_checked(&dir)?;
     if !st.portable {
@@ -242,7 +239,7 @@ mod tests {
         }
         fs::remove_dir_all(t.path().join("cfg")).unwrap();
         let state = state_in(t.path());
-        boot(&state, &t.path().join("app"), &[data.clone()], at(NOW));
+        boot(&state, &t.path().join("app"), std::slice::from_ref(&data), at(NOW));
         assert!(state.status().ready);
         assert_eq!(location::read_location(&state.location_file), Some(data));
     }
@@ -321,14 +318,12 @@ mod tests {
     fn is_corruption_distinguishes_garbage_from_cannot_open() {
         let t = tempfile::tempdir().unwrap();
         fs::write(t.path().join(DB_FILE), b"this is not a database file at all").unwrap();
-        let err = open_checked(t.path()).err().expect("garbage must not open");
+        let Err(err) = open_checked(t.path()) else { panic!("garbage must not open") };
         assert!(is_corruption(&err));
         assert!(is_corruption(&AppError::Corrupt));
 
-        let cant_open = AppError::Db(rusqlite::Error::SqliteFailure(
-            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CANTOPEN),
-            None,
-        ));
+        let cant_open =
+            AppError::Db(rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CANTOPEN), None));
         assert!(!is_corruption(&cant_open));
         assert!(!is_corruption(&AppError::invalid("x")));
     }

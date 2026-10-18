@@ -31,14 +31,30 @@ jobs:
       - name: 화면 빌드 · 타입 검사
         run: npm run build
 
+      - name: 화면 코드 검사
+        run: npm run lint
+
       - name: 화면 테스트
         run: npm test
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
 
+      - name: Rust 코드 모양 검사
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Rust 코드 검사 (경고도 실패로)
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
       - name: 규칙 · 저장 테스트
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      # 같은 라이브러리가 여러 버전으로 들어오면 앱이 커진다. 실패로 막지는 않고 기록만 남긴다
+      # (Tauri 자체가 windows-sys 여러 버전을 쓰므로 0개로 만들 수는 없다).
+      - name: 중복 의존성 기록
+        run: cargo tree --manifest-path src-tauri/Cargo.toml -d -e normal --depth 0

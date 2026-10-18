@@ -42,9 +42,7 @@ fn all_routines(c: &Connection) -> AppResult<Vec<Routine>> {
 }
 
 pub fn export(c: &Connection, now: &str) -> AppResult<BackupFile> {
-    let mut st = c.prepare(
-        "SELECT id, day, routine_id, title_snapshot, sort_order, completed_at FROM day_items ORDER BY id",
-    )?;
+    let mut st = c.prepare("SELECT id, day, routine_id, title_snapshot, sort_order, completed_at FROM day_items ORDER BY id")?;
     let day_items = st
         .query_map([], |r| {
             Ok(DayItemRow {
@@ -57,18 +55,15 @@ pub fn export(c: &Connection, now: &str) -> AppResult<BackupFile> {
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
-    let mut st = c.prepare("SELECT key, value FROM settings WHERE key NOT LIKE 'window_%' AND key NOT IN ('synced_day', 'holidays_cache', 'seen_version') ORDER BY key")?;
+    let mut st = c.prepare("SELECT key, value FROM settings ORDER BY key")?;
     let settings = st
         .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(BackupFile {
-        app: APP.into(),
-        version: VERSION,
-        exported_at: now.into(),
-        routines: all_routines(c)?,
-        day_items,
-        settings,
-    })
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        // 창 위치처럼 이 PC에만 해당하는 것은 백업에 넣지 않는다
+        .filter(|(k, _)| !settings::PC_ONLY_KEYS.contains(&k.as_str()))
+        .collect();
+    Ok(BackupFile { app: APP.into(), version: VERSION, exported_at: now.into(), routines: all_routines(c)?, day_items, settings })
 }
 
 /// 현재 데이터를 백업 내용으로 통째로 바꾼다 (창 위치 설정은 유지).
@@ -78,7 +73,7 @@ pub fn import(c: &Connection, b: &BackupFile) -> AppResult<()> {
     tx.execute("DELETE FROM day_items", [])?;
     tx.execute("DELETE FROM routines", [])?;
     // 창 위치, '바뀐 점'을 본 버전, 내려받은 공휴일 표는 이 PC의 것이라 그대로 둔다
-    tx.execute("DELETE FROM settings WHERE key NOT LIKE 'window_%' AND key NOT IN ('seen_version', 'holidays_cache')", [])?;
+    tx.execute("DELETE FROM settings WHERE key NOT IN (?1, ?2, ?3, ?4)", rusqlite::params_from_iter(settings::KEPT_ON_IMPORT))?;
     for r in &b.routines {
         tx.execute(
             "INSERT INTO routines (id, title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, archived_at, slot)
@@ -107,7 +102,7 @@ pub fn import(c: &Connection, b: &BackupFile) -> AppResult<()> {
     }
     for (k, v) in &b.settings {
         // Skip window position settings to preserve UI state
-        if k.starts_with("window_") || k == settings::SEEN_VERSION {
+        if settings::PC_ONLY_KEYS.contains(&k.as_str()) {
             continue;
         }
         // Use settings::apply for validation and upserting; silently skip invalid pairs
@@ -115,10 +110,10 @@ pub fn import(c: &Connection, b: &BackupFile) -> AppResult<()> {
     }
     // 방학 기간은 두 날짜가 모두 올바르고 순서가 맞을 때만 함께 되살린다
     let find = |key: &str| b.settings.iter().find(|(k, _)| k == key).and_then(|(_, v)| parse_day(v));
-    if let (Some(start), Some(end)) = (find("vacation_start"), find("vacation_end")) {
+    if let (Some(start), Some(end)) = (find(settings::VACATION_START), find(settings::VACATION_END)) {
         if start <= end {
-            settings::set(&tx, "vacation_start", &fmt_day(start))?;
-            settings::set(&tx, "vacation_end", &fmt_day(end))?;
+            settings::set(&tx, settings::VACATION_START, &fmt_day(start))?;
+            settings::set(&tx, settings::VACATION_END, &fmt_day(end))?;
         }
     }
     tx.commit()?;
@@ -325,7 +320,7 @@ mod tests {
                 id: 1,
                 title: "test".into(),
                 repeat_type: crate::model::RepeatType::Daily,
-                weekdays: 200,  // Invalid: > 0x7F
+                weekdays: 200, // Invalid: > 0x7F
                 once_date: None,
                 due_time: None,
                 link: None,

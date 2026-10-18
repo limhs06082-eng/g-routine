@@ -29,6 +29,7 @@ const base: AppStatus = {
   dataDir: null,
   shortcut: true,
   pendingUpdate: null,
+  autostartFailed: false,
 };
 
 beforeEach(() => {
@@ -80,7 +81,7 @@ test("the app's inspection result wins over the local guess", async () => {
 });
 
 test("the D drive hint only shows when the storage folder can be chosen", () => {
-  apiMock.inspectDataDir.mockResolvedValue({ normalized: "D:\G-routine\data", hasData: false });
+  apiMock.inspectDataDir.mockResolvedValue({ normalized: "D:\\G-routine\\data", hasData: false });
   const { unmount } = render(<Setup status={base} />);
   expect(screen.getByText(/복원 프로그램이 있는 PC는 D드라이브를 고르세요/)).toBeInTheDocument();
   unmount();

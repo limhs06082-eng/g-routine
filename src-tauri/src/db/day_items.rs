@@ -1,14 +1,14 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use chrono::NaiveDate;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
+use crate::db::{routines, settings};
 use crate::domain::day::{fmt_day, parse_day};
-use crate::domain::rules::scheduled;
-use crate::db::routines;
-use crate::error::{AppError, AppResult};
 use crate::domain::rest::RestKind;
-use crate::model::{DayItem, DaySummary, RepeatType, Slot};
+use crate::domain::rules::scheduled;
+use crate::error::{AppError, AppResult};
+use crate::model::{DayItem, DaySummary, RepeatType, Routine, Slot};
 
 const ITEM_SELECT: &str = "SELECT d.id, d.day, d.routine_id, d.title_snapshot, d.sort_order, d.completed_at,
         r.repeat_type, r.due_time, r.link, r.slot
@@ -32,14 +32,11 @@ fn item_from_row(r: &Row) -> rusqlite::Result<DayItem> {
     })
 }
 
-const SYNCED_DAY_KEY: &str = "synced_day";
-
 /// 지금까지 맞춘 가장 늦은 업무일. 기록 키가 기준이고, 키가 없을 때(예전 버전 DB, 백업 복원 직후)만
 /// 남아 있는 기록 중 가장 늦은 날을 쓴다.
 fn last_synced_day(c: &Connection) -> AppResult<Option<NaiveDate>> {
-    let mark: Option<String> = c
-        .query_row("SELECT value FROM settings WHERE key = ?1", [SYNCED_DAY_KEY], |r| r.get(0))
-        .optional()?;
+    let mark: Option<String> =
+        c.query_row("SELECT value FROM settings WHERE key = ?1", [settings::SYNCED_DAY], |r| r.get(0)).optional()?;
     let mark = match mark {
         Some(m) => Some(m),
         None => c.query_row("SELECT MAX(day) FROM day_items", [], |r| r.get(0))?,
@@ -58,10 +55,53 @@ pub fn effective_day(c: &Connection, day: NaiveDate) -> AppResult<NaiveDate> {
     }
 }
 
+/// 그날 이미 있는 항목 (맞출 때 비교용)
+struct Existing {
+    id: i64,
+    title: String,
+    sort_order: i64,
+    done: bool,
+}
+
+/// 맞추려면 바꿔야 할 것
+enum Change<'a> {
+    Insert(&'a Routine),
+    Sort(i64, i64),
+    Title(i64, &'a str),
+    Delete(i64),
+}
+
+fn plan<'a>(existing: &HashMap<i64, Existing>, sched: &[&'a Routine]) -> Vec<Change<'a>> {
+    let mut changes = Vec::new();
+    for r in sched {
+        match existing.get(&r.id) {
+            None => changes.push(Change::Insert(r)),
+            Some(e) => {
+                if e.sort_order != r.sort_order {
+                    changes.push(Change::Sort(e.id, r.sort_order));
+                }
+                // 끝낸 항목은 그때의 이름을 그대로 남긴다
+                if !e.done && e.title != r.title {
+                    changes.push(Change::Title(e.id, &r.title));
+                }
+            }
+        }
+    }
+    let keep: HashSet<i64> = sched.iter().map(|r| r.id).collect();
+    for (routine_id, e) in existing {
+        if !e.done && !keep.contains(routine_id) {
+            changes.push(Change::Delete(e.id));
+        }
+    }
+    changes
+}
+
 /// 그 업무일의 할 일 스냅샷을 루틴 규칙에 맞춘다. 오늘 업무일(`effective_day`)에만 호출할 것.
 /// - 새로 해당되는 루틴은 추가
 /// - 더 이상 해당하지 않는 미완료 항목은 제거 (완료 항목은 보존)
 /// - 미완료 항목의 이름과 모든 항목의 순서를 루틴과 맞춤
+///
+/// 바뀔 것이 없으면 DB에 아무것도 쓰지 않는다 (위젯이 목록을 자주 읽어도 디스크에 쓰지 않게).
 pub fn sync_day(c: &Connection, day: NaiveDate, rest: Option<RestKind>) -> AppResult<()> {
     if effective_day(c, day)? != day {
         return Ok(()); // 이미 넘어간 어제 기록은 건드리지 않는다
@@ -69,35 +109,46 @@ pub fn sync_day(c: &Connection, day: NaiveDate, rest: Option<RestKind>) -> AppRe
     let d = fmt_day(day);
     let all = routines::list_unarchived(c)?;
     let sched = scheduled(&all, day, rest);
+    let existing: HashMap<i64, Existing> = {
+        let mut st = c.prepare(
+            "SELECT id, routine_id, title_snapshot, sort_order, completed_at IS NOT NULL FROM day_items WHERE day = ?1",
+        )?;
+        let rows = st
+            .query_map([&d], |r| {
+                Ok((r.get::<_, i64>(1)?, Existing { id: r.get(0)?, title: r.get(2)?, sort_order: r.get(3)?, done: r.get(4)? }))
+            })?
+            .collect::<Result<HashMap<_, _>, _>>()?;
+        rows
+    };
+    let changes = plan(&existing, &sched);
+    let marked =
+        c.query_row("SELECT value FROM settings WHERE key = ?1", [settings::SYNCED_DAY], |r| r.get::<_, String>(0)).optional()?;
+    if changes.is_empty() && marked.as_deref() == Some(d.as_str()) {
+        return Ok(());
+    }
     let tx = c.unchecked_transaction()?;
     tx.execute(
         "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        params![SYNCED_DAY_KEY, d],
+        params![settings::SYNCED_DAY, d],
     )?;
-    for r in &sched {
-        tx.execute(
-            "INSERT OR IGNORE INTO day_items (day, routine_id, title_snapshot, sort_order) VALUES (?1, ?2, ?3, ?4)",
-            params![d, r.id, r.title, r.sort_order],
-        )?;
-        tx.execute(
-            "UPDATE day_items SET sort_order = ?3 WHERE day = ?1 AND routine_id = ?2",
-            params![d, r.id, r.sort_order],
-        )?;
-        tx.execute(
-            "UPDATE day_items SET title_snapshot = ?3 WHERE day = ?1 AND routine_id = ?2 AND completed_at IS NULL",
-            params![d, r.id, r.title],
-        )?;
-    }
-    let keep: HashSet<i64> = sched.iter().map(|r| r.id).collect();
-    let stale: Vec<i64> = {
-        let mut st = tx.prepare("SELECT id, routine_id FROM day_items WHERE day = ?1 AND completed_at IS NULL")?;
-        let rows = st
-            .query_map([&d], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))?
-            .collect::<Result<Vec<_>, _>>()?;
-        rows.into_iter().filter(|(_, rid)| !keep.contains(rid)).map(|(id, _)| id).collect()
-    };
-    for id in stale {
-        tx.execute("DELETE FROM day_items WHERE id = ?1", [id])?;
+    for change in changes {
+        match change {
+            Change::Insert(r) => {
+                tx.execute(
+                    "INSERT INTO day_items (day, routine_id, title_snapshot, sort_order) VALUES (?1, ?2, ?3, ?4)",
+                    params![d, r.id, r.title, r.sort_order],
+                )?;
+            }
+            Change::Sort(id, sort) => {
+                tx.execute("UPDATE day_items SET sort_order = ?2 WHERE id = ?1", params![id, sort])?;
+            }
+            Change::Title(id, title) => {
+                tx.execute("UPDATE day_items SET title_snapshot = ?2 WHERE id = ?1", params![id, title])?;
+            }
+            Change::Delete(id) => {
+                tx.execute("DELETE FROM day_items WHERE id = ?1", [id])?;
+            }
+        }
     }
     tx.commit()?;
     Ok(())
@@ -111,10 +162,7 @@ pub fn items_for_day(c: &Connection, day: &str) -> AppResult<Vec<DayItem>> {
 
 pub fn set_done(c: &Connection, item_id: i64, done: bool, now: &str) -> AppResult<()> {
     let n = if done {
-        c.execute(
-            "UPDATE day_items SET completed_at = COALESCE(completed_at, ?2) WHERE id = ?1",
-            params![item_id, now],
-        )?
+        c.execute("UPDATE day_items SET completed_at = COALESCE(completed_at, ?2) WHERE id = ?1", params![item_id, now])?
     } else {
         c.execute("UPDATE day_items SET completed_at = NULL WHERE id = ?1", [item_id])?
     };
@@ -126,9 +174,8 @@ pub fn set_done(c: &Connection, item_id: i64, done: bool, now: &str) -> AppResul
 
 pub fn month_summary(c: &Connection, year: i32, month: u32) -> AppResult<Vec<DaySummary>> {
     let prefix = format!("{year:04}-{month:02}-%");
-    let mut st = c.prepare(
-        "SELECT day, COUNT(*), COUNT(completed_at) FROM day_items WHERE day LIKE ?1 GROUP BY day ORDER BY day",
-    )?;
+    let mut st =
+        c.prepare("SELECT day, COUNT(*), COUNT(completed_at) FROM day_items WHERE day LIKE ?1 GROUP BY day ORDER BY day")?;
     let rows = st
         .query_map([prefix], |r| Ok(DaySummary { day: r.get(0)?, total: r.get(1)?, completed: r.get(2)? }))?
         .collect::<Result<Vec<_>, _>>()?;

@@ -182,10 +182,7 @@ mod tests {
     #[test]
     fn normalize_appends_g_routine_data_to_plain_folders() {
         assert_eq!(normalize_data_dir(Path::new("D:\\")), PathBuf::from("D:\\").join("G-routine").join("data"));
-        assert_eq!(
-            normalize_data_dir(Path::new("D:\\내 자료")),
-            PathBuf::from("D:\\내 자료").join("G-routine").join("data")
-        );
+        assert_eq!(normalize_data_dir(Path::new("D:\\내 자료")), PathBuf::from("D:\\내 자료").join("G-routine").join("data"));
     }
 
     #[test]
@@ -201,10 +198,7 @@ mod tests {
         let custom = t.path().join("내 자료");
         touch_db(&custom);
         assert_eq!(normalize_data_dir(&custom), custom);
-        assert_eq!(
-            inspect_data_dir(&custom),
-            DataDirInfo { normalized: custom.display().to_string(), has_data: true }
-        );
+        assert_eq!(inspect_data_dir(&custom), DataDirInfo { normalized: custom.display().to_string(), has_data: true });
         let empty = t.path().join("E");
         assert_eq!(
             inspect_data_dir(&empty),

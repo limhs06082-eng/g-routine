@@ -199,10 +199,8 @@ mod tests {
         // 일요일 포함 공휴일 수: 2026년 72일(월력요항 70일 + 지방선거일 + 제헌절), 2027년 72일(월력요항)
         let t = built_in();
         for (year, official) in [(2026, 72), (2027, 72)] {
-            let sundays = (1..=366)
-                .filter_map(|o| NaiveDate::from_yo_opt(year, o))
-                .filter(|d| d.weekday() == Weekday::Sun)
-                .count();
+            let sundays =
+                (1..=366).filter_map(|o| NaiveDate::from_yo_opt(year, o)).filter(|d| d.weekday() == Weekday::Sun).count();
             let extra = t.years[&year].keys().filter(|d| d.weekday() != Weekday::Sun).count();
             assert_eq!(sundays + extra, official, "{year}");
         }

@@ -3,6 +3,7 @@ pub mod holidays;
 pub mod memory;
 pub mod position;
 pub mod shortcut;
+pub mod ticker;
 pub mod tray;
 pub mod update;
 pub mod window;
@@ -24,12 +25,14 @@ pub fn startup(app: &AppHandle) -> tauri::Result<()> {
     }
     window::place_widget(app, saved)?;
     window::show_widget_quietly(app);
-    window::spawn_day_watcher(app.clone());
     Ok(())
 }
 
 /// 시작 설정 · 복구 · 백업 불러오기 직후 설정을 OS에 반영
 pub fn after_ready(app: &AppHandle) {
+    if let Some(dir) = app.state::<AppState>().data_dir() {
+        crate::logging::use_dir(dir.join("logs"));
+    }
     if let Ok(s) = app.state::<AppState>().with_conn(settings::load) {
         apply_all(app, &s);
     }
@@ -67,9 +70,17 @@ fn sync_autostart(app: &AppHandle, on: bool) {
     use tauri_plugin_autostart::ManagerExt;
     let launcher = app.autolaunch();
     let enabled = launcher.is_enabled().unwrap_or(false);
-    if on && !enabled {
-        let _ = launcher.enable();
+    let result = if on && !enabled {
+        launcher.enable()
     } else if !on && enabled {
-        let _ = launcher.disable();
+        launcher.disable()
+    } else {
+        Ok(())
+    };
+    // 학교 PC 보안 정책으로 막힐 수 있다. 설정 탭에서 알려 준다.
+    if let Err(e) = &result {
+        log::warn!("자동 시작 {}에 실패했어요: {e}", if on { "등록" } else { "해제" });
     }
+    let failed = result.is_err();
+    app.state::<AppState>().autostart_failed.store(failed, std::sync::atomic::Ordering::Relaxed);
 }

@@ -21,7 +21,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 
 import { WidgetApp } from "./WidgetApp";
 
-const status: AppStatus = { ready: true, corrupt: false, openFailed: false, portable: false, previousDir: null, suggestedDir: "", dataDir: "D:\G-routine\data", shortcut: true, pendingUpdate: null };
+const status: AppStatus = { ready: true, corrupt: false, openFailed: false, portable: false, previousDir: null, suggestedDir: "", dataDir: "D:\\G-routine\\data", shortcut: true, pendingUpdate: null, autostartFailed: false };
 const settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: true, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, miniMode: false, vacationStart: null, vacationEnd: null, seenVersion: null };
 const view: TodayView = { day: "2026-10-12", rest: null, pending: [], done: [] };
 

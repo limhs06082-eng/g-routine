@@ -8,11 +8,12 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::db::settings;
 use crate::domain::holidays::{self, HolidayTable};
+use crate::shell::ticker::Job;
 use crate::state::AppState;
 use crate::DATA_CHANGED;
 
 const URL: &str = "https://raw.githubusercontent.com/limhs06082-eng/g-routine/main/src-tauri/data/holidays.json";
-pub const CACHE_KEY: &str = "holidays_cache";
+const CACHE_KEY: &str = settings::HOLIDAYS_CACHE;
 const FIRST_CHECK: Duration = Duration::from_secs(30);
 const INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 /// 공휴일 표는 몇 KB다. 이보다 크면 받지 않는다.
@@ -26,21 +27,24 @@ pub fn load_cached(app: &AppHandle) {
     }
 }
 
-pub fn spawn_holiday_refresher(app: AppHandle) {
-    std::thread::spawn(move || {
-        std::thread::sleep(FIRST_CHECK);
-        loop {
-            if let Ok(json) = tauri::async_runtime::block_on(download()) {
-                apply(&app, &json);
-            }
-            std::thread::sleep(INTERVAL);
-        }
-    });
+/// 공휴일 표 내려받기 작업 (shell::ticker가 돌린다)
+pub fn job() -> Job {
+    Job::new("공휴일 표", FIRST_CHECK, INTERVAL, |app| match tauri::async_runtime::block_on(download()) {
+        Ok(json) => apply(app, &json),
+        // 학교 인터넷에서 GitHub가 막혀 있을 수 있다. 내장 표나 보관본을 그대로 쓴다.
+        Err(e) => log::info!("공휴일 표를 받지 못했어요: {e}"),
+    })
 }
 
 /// 받은 표가 올바르면 쓰고, 보관한 것과 다르면 보관한 뒤 화면을 새로 고친다.
 fn apply(app: &AppHandle, json: &str) {
-    let Ok(table) = HolidayTable::parse(json) else { return };
+    let table = match HolidayTable::parse(json) {
+        Ok(t) => t,
+        Err(e) => {
+            log::warn!("받은 공휴일 표가 올바르지 않아 쓰지 않아요: {e}");
+            return;
+        }
+    };
     holidays::use_downloaded(&table);
     let state = app.state::<AppState>();
     let changed = state
@@ -53,6 +57,7 @@ fn apply(app: &AppHandle, json: &str) {
         })
         .unwrap_or(false);
     if changed {
+        log::info!("새 공휴일 표를 받았어요 (마지막 해: {:?})", table.last_year());
         let _ = app.emit(DATA_CHANGED, ());
     }
 }
@@ -62,11 +67,8 @@ async fn download() -> Result<String, String> {
     if rustls::crypto::CryptoProvider::get_default().is_none() {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }
-    let client = reqwest::Client::builder()
-        .user_agent("G-routine")
-        .timeout(Duration::from_secs(15))
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client =
+        reqwest::Client::builder().user_agent("G-routine").timeout(Duration::from_secs(15)).build().map_err(|e| e.to_string())?;
     let res = client.get(URL).send().await.map_err(|e| e.to_string())?;
     if !res.status().is_success() {
         return Err(format!("HTTP {}", res.status()));

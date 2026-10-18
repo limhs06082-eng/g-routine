@@ -62,6 +62,7 @@ pub fn daily_backup(c: &Connection, data_dir: &Path, day: &str) -> AppResult<Opt
     }
 }
 
+#[cfg(test)]
 pub fn latest_backup(data_dir: &Path) -> Option<PathBuf> {
     list_backups(&backups_dir(data_dir)).pop()
 }
@@ -95,10 +96,7 @@ fn free_name(path: &Path) -> PathBuf {
         return path.to_path_buf();
     }
     let base = path.as_os_str().to_string_lossy().to_string();
-    (2..)
-        .map(|n| PathBuf::from(format!("{base}-{n}")))
-        .find(|p| !p.exists())
-        .expect("빈 이름은 언젠가 나온다")
+    (2..).map(|n| PathBuf::from(format!("{base}-{n}"))).find(|p| !p.exists()).expect("빈 이름은 언젠가 나온다")
 }
 
 /// 지금 DB 파일과 그 저널 파일들을 `.corrupt-<시각>` 이름으로 옆에 치워 둔다 (지우지 않는다).
