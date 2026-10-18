@@ -8,6 +8,8 @@ pub enum RepeatType {
     Daily,
     Weekdays,
     Once,
+    /// 매월 N일 (주말 · 공휴일이면 바로 앞 평일)
+    Monthly,
 }
 
 impl RepeatType {
@@ -16,6 +18,7 @@ impl RepeatType {
             RepeatType::Daily => "daily",
             RepeatType::Weekdays => "weekdays",
             RepeatType::Once => "once",
+            RepeatType::Monthly => "monthly",
         }
     }
 
@@ -24,6 +27,7 @@ impl RepeatType {
             "daily" => Some(RepeatType::Daily),
             "weekdays" => Some(RepeatType::Weekdays),
             "once" => Some(RepeatType::Once),
+            "monthly" => Some(RepeatType::Monthly),
             _ => None,
         }
     }
@@ -73,6 +77,14 @@ pub struct Routine {
     /// 예전 백업 파일에는 없다
     #[serde(default)]
     pub slot: Option<Slot>,
+    /// 매월 반복의 날짜 (1–31, 0은 그달 마지막 날)
+    #[serde(default)]
+    pub month_day: Option<u8>,
+    /// 기간 한정 (YYYY-MM-DD, 둘 다 포함). 없으면 계속
+    #[serde(default)]
+    pub active_from: Option<String>,
+    #[serde(default)]
+    pub active_until: Option<String>,
     pub sort_order: i64,
     pub created_at: String,
     pub archived_at: Option<String>,
@@ -89,6 +101,12 @@ pub struct RoutineInput {
     pub link: Option<String>,
     #[serde(default)]
     pub slot: Option<Slot>,
+    #[serde(default)]
+    pub month_day: Option<u8>,
+    #[serde(default)]
+    pub active_from: Option<String>,
+    #[serde(default)]
+    pub active_until: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

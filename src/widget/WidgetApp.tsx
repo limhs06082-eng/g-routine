@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Setup } from "./Setup";
 import { TodayPanel } from "./TodayPanel";
 import { UpdateBanner } from "./UpdateBanner";
+import { BackupSuggestion } from "./BackupSuggestion";
 import { WhatsNew } from "./WhatsNew";
 
 export function WidgetApp() {
@@ -30,6 +31,9 @@ export function WidgetApp() {
   const notes = newer && version ? unseenNotes(seen, version) : [];
   const markSeen = newer ? version : null;
   const pendingUpdate = status?.pendingUpdate ?? null;
+  // OneDrive가 있는데 두 번째 백업을 정하지 않았으면 한 번 권한다 (다른 안내가 없을 때만)
+  const { data: backup2, reload: reloadBackup2 } = useData(() => (ready ? api.backup2Info() : Promise.resolve(null)), [ready]);
+  const suggestBackup = backup2?.suggested && !backup2.dir && !backup2.dismissed && !pendingUpdate && notes.length === 0 ? backup2.suggested : null;
   useEffect(() => {
     if (markSeen && notes.length === 0) void update("seen_version", markSeen).catch(() => {});
   }, [markSeen, notes.length, update]);
@@ -44,6 +48,7 @@ export function WidgetApp() {
         <>
           {pendingUpdate && <UpdateBanner version={pendingUpdate} />}
           {notes.length > 0 && markSeen && <WhatsNew notes={notes} onClose={() => void update("seen_version", markSeen).catch(() => {})} />}
+          {suggestBackup && <BackupSuggestion dir={suggestBackup} onDone={() => void reloadBackup2()} />}
         </>
       }
     />

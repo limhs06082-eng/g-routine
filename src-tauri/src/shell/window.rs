@@ -213,6 +213,23 @@ fn schedule_position_save(app: &AppHandle, x: i32, bottom: i32) {
     });
 }
 
+/// 두 번째 백업(OneDrive · USB): 6시간마다 살펴 일주일이 지났으면 백업한다. 폴더를 정하지 않았으면 아무것도 하지 않는다.
+pub fn backup2_job() -> Job {
+    Job::new("두 번째 백업", Duration::from_secs(180), Duration::from_secs(6 * 60 * 60), |app| {
+        let state = app.state::<AppState>();
+        let result = state.with_conn(|c| {
+            let today = service::today(c, now())?;
+            crate::storage::offsite::run_if_due(c, today, &crate::domain::day::fmt_ts(now()))
+        });
+        match result {
+            Ok(Some(_)) => log::info!("두 번째 백업을 만들었어요"),
+            Ok(None) => {}
+            // USB를 빼 둔 날 등. 다음에 다시 시도한다
+            Err(e) => log::warn!("두 번째 백업을 만들지 못했어요: {e:?}"),
+        }
+    })
+}
+
 /// 30초마다 업무일을 확인해 바뀌면 백업 후 data-changed를 보낸다 (절전 복귀 포함). shell::ticker가 돌린다.
 pub fn day_watch_job() -> Job {
     let mut last = None;

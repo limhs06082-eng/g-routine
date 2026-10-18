@@ -12,6 +12,9 @@ const apiMock = vi.hoisted(() => ({
   importBackup: vi.fn(),
   setVacation: vi.fn(),
   saveDiagnostics: vi.fn(),
+  backup2Info: vi.fn(() => Promise.resolve({ dir: null as string | null, last: null as string | null, suggested: null as string | null, dismissed: false })),
+  setBackup2Dir: vi.fn(),
+  backup2Now: vi.fn(),
   holidayCoverage: vi.fn(() => Promise.resolve({ lastYear: 2027, state: "ok" })),
 }));
 
@@ -176,4 +179,15 @@ test("diagnostics are saved where the teacher picks", async () => {
 test("a failed autostart registration is explained", () => {
   render(<SettingsTab settings={settings} status={{ ...status, autostartFailed: true }} onChange={vi.fn()} />);
   expect(screen.getByText(/자동 시작을 등록하지 못했어요/)).toBeInTheDocument();
+});
+
+test("settings offer OneDrive first for the second backup", async () => {
+  const user = userEvent.setup();
+  apiMock.backup2Info.mockResolvedValueOnce({ dir: null, last: null, suggested: "C:/Users/t/OneDrive", dismissed: false });
+  apiMock.setBackup2Dir.mockResolvedValue({ dir: "C:/Users/t/OneDrive", last: "2026-10-12", suggested: null, dismissed: false });
+  render(<SettingsTab settings={settings} status={status} onChange={vi.fn()} />);
+  await user.click(await screen.findByRole("button", { name: "OneDrive에 백업하기" }));
+  expect(apiMock.setBackup2Dir).toHaveBeenCalledWith("C:/Users/t/OneDrive");
+  expect(await screen.findByText(/폴더에 일주일마다 백업해요/)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "지금 백업" })).toBeInTheDocument();
 });

@@ -61,7 +61,7 @@ pub fn run() {
             shell::holidays::load_cached(app.handle());
             shell::ticker::spawn(
                 app.handle().clone(),
-                vec![shell::window::day_watch_job(), shell::alerts::job(), shell::holidays::job()],
+                vec![shell::window::day_watch_job(), shell::alerts::job(), shell::holidays::job(), shell::window::backup2_job()],
             );
             let shortcut = shell::shortcut::register(app.handle());
             if !shortcut {
@@ -92,6 +92,10 @@ pub fn run() {
             commands::set_vacation,
             commands::holiday_coverage,
             commands::save_diagnostics,
+            commands::backup2_info,
+            commands::set_backup2_dir,
+            commands::backup2_now,
+            commands::dismiss_backup2,
             commands::open_link,
             commands::export_backup,
             commands::import_backup,

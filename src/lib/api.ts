@@ -89,6 +89,18 @@ export interface HolidayCoverage {
   state: "ok" | "endingSoon" | "missing";
 }
 
+/** 두 번째 백업(OneDrive · USB, 주 1회) */
+export interface Backup2Info {
+  /** 고른 폴더 (그 안의 'G-routine 백업' 폴더에 쓴다) */
+  dir: string | null;
+  /** 마지막으로 백업한 날 (YYYY-MM-DD) */
+  last: string | null;
+  /** 아직 정하지 않았을 때 먼저 권할 OneDrive 폴더 */
+  suggested: string | null;
+  /** 위젯의 권유 카드를 '나중에'로 닫았는지 */
+  dismissed: boolean;
+}
+
 export interface AppStatus {
   ready: boolean;
   corrupt: boolean;
@@ -134,6 +146,11 @@ export const api = {
   setVacation: (start: string | null, end: string | null) => invoke<Settings>("set_vacation", { start, end }),
   /** 문제 보고용 정보(상태 · 설정 · 데이터 개수 · 최근 로그)를 글 파일로 저장한다 */
   saveDiagnostics: (path: string) => invoke<void>("save_diagnostics", { path }),
+  backup2Info: () => invoke<Backup2Info>("backup2_info"),
+  /** 두 번째 백업 폴더를 정하거나(곧바로 한 번 백업한다) null로 끈다 */
+  setBackup2Dir: (dir: string | null) => invoke<Backup2Info>("set_backup2_dir", { dir }),
+  backup2Now: () => invoke<Backup2Info>("backup2_now"),
+  dismissBackup2: () => invoke<void>("dismiss_backup2"),
   holidayCoverage: () => invoke<HolidayCoverage>("holiday_coverage"),
   openLink: (routineId: number) => invoke<void>("open_link", { routineId }),
   exportBackup: (path: string) => invoke<void>("export_backup", { path }),

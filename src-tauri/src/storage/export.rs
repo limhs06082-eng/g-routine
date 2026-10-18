@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::db::{routines, settings};
 use crate::domain::day::{fmt_day, parse_day};
 use crate::error::{AppError, AppResult};
-use crate::model::Routine;
+use crate::model::{RepeatType, Routine, RoutineInput, Slot};
 
 const APP: &str = "g-routine";
 const VERSION: u32 = 1;
@@ -22,6 +22,13 @@ pub struct DayItemRow {
     pub title_snapshot: String,
     pub sort_order: i64,
     pub completed_at: Option<String>,
+    /// 그날 적어 둔 반복 종류 · 마감 시각 · 시간대 (예전 백업에는 없다)
+    #[serde(default)]
+    pub repeat_type_snapshot: Option<String>,
+    #[serde(default)]
+    pub due_time_snapshot: Option<String>,
+    #[serde(default)]
+    pub slot_snapshot: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -42,7 +49,10 @@ fn all_routines(c: &Connection) -> AppResult<Vec<Routine>> {
 }
 
 pub fn export(c: &Connection, now: &str) -> AppResult<BackupFile> {
-    let mut st = c.prepare("SELECT id, day, routine_id, title_snapshot, sort_order, completed_at FROM day_items ORDER BY id")?;
+    let mut st = c.prepare(
+        "SELECT id, day, routine_id, title_snapshot, sort_order, completed_at, repeat_type_snapshot, due_time_snapshot, slot_snapshot
+           FROM day_items ORDER BY id",
+    )?;
     let day_items = st
         .query_map([], |r| {
             Ok(DayItemRow {
@@ -52,6 +62,9 @@ pub fn export(c: &Connection, now: &str) -> AppResult<BackupFile> {
                 title_snapshot: r.get(3)?,
                 sort_order: r.get(4)?,
                 completed_at: r.get(5)?,
+                repeat_type_snapshot: r.get(6)?,
+                due_time_snapshot: r.get(7)?,
+                slot_snapshot: r.get(8)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -73,11 +86,16 @@ pub fn import(c: &Connection, b: &BackupFile) -> AppResult<()> {
     tx.execute("DELETE FROM day_items", [])?;
     tx.execute("DELETE FROM routines", [])?;
     // 창 위치, '바뀐 점'을 본 버전, 내려받은 공휴일 표는 이 PC의 것이라 그대로 둔다
-    tx.execute("DELETE FROM settings WHERE key NOT IN (?1, ?2, ?3, ?4)", rusqlite::params_from_iter(settings::KEPT_ON_IMPORT))?;
+    let placeholders = vec!["?"; settings::KEPT_ON_IMPORT.len()].join(", ");
+    tx.execute(
+        &format!("DELETE FROM settings WHERE key NOT IN ({placeholders})"),
+        rusqlite::params_from_iter(settings::KEPT_ON_IMPORT),
+    )?;
     for r in &b.routines {
         tx.execute(
-            "INSERT INTO routines (id, title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, archived_at, slot)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            "INSERT INTO routines (id, title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, archived_at, slot,
+                                   month_day, active_from, active_until)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 r.id,
                 r.title,
@@ -89,15 +107,29 @@ pub fn import(c: &Connection, b: &BackupFile) -> AppResult<()> {
                 r.sort_order,
                 r.created_at,
                 r.archived_at,
-                r.slot.map(|s| s.as_str())
+                r.slot.map(|s| s.as_str()),
+                r.month_day,
+                r.active_from,
+                r.active_until
             ],
         )?;
     }
     for d in &b.day_items {
         tx.execute(
-            "INSERT INTO day_items (id, day, routine_id, title_snapshot, sort_order, completed_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![d.id, d.day, d.routine_id, d.title_snapshot, d.sort_order, d.completed_at],
+            "INSERT INTO day_items (id, day, routine_id, title_snapshot, sort_order, completed_at,
+                                    repeat_type_snapshot, due_time_snapshot, slot_snapshot)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                d.id,
+                d.day,
+                d.routine_id,
+                d.title_snapshot,
+                d.sort_order,
+                d.completed_at,
+                d.repeat_type_snapshot,
+                d.due_time_snapshot,
+                d.slot_snapshot
+            ],
         )?;
     }
     for (k, v) in &b.settings {
@@ -147,6 +179,22 @@ fn validate(b: &BackupFile) -> AppResult<()> {
         if !routine_ids.insert(r.id) {
             return Err(AppError::invalid("백업 파일 내용이 올바르지 않아요"));
         }
+        // 직접 추가할 때와 같은 규칙(이름 길이, 바로가기 형식, 요일 · 날짜 · 기간)을 지켜야 한다
+        let input = RoutineInput {
+            title: r.title.clone(),
+            repeat_type: r.repeat_type,
+            weekdays: r.weekdays,
+            once_date: r.once_date.clone(),
+            due_time: r.due_time.clone(),
+            link: r.link.clone(),
+            slot: r.slot,
+            month_day: r.month_day,
+            active_from: r.active_from.clone(),
+            active_until: r.active_until.clone(),
+        };
+        if let Err(e) = routines::validate(input) {
+            return Err(AppError::invalid(format!("백업 파일의 루틴 ‘{}’을(를) 불러올 수 없어요: {e}", r.title)));
+        }
     }
 
     // Validate day items
@@ -162,6 +210,13 @@ fn validate(b: &BackupFile) -> AppResult<()> {
         }
         // Check day item ids are unique
         if !day_item_ids.insert(d.id) {
+            return Err(AppError::invalid("백업 파일 내용이 올바르지 않아요"));
+        }
+        let repeat_ok = d.repeat_type_snapshot.as_deref().is_none_or(|t| RepeatType::parse(t).is_some());
+        let slot_ok = d.slot_snapshot.as_deref().is_none_or(|s| Slot::parse(s).is_some());
+        let due_ok =
+            d.due_time_snapshot.as_deref().is_none_or(|t| t.len() == 5 && chrono::NaiveTime::parse_from_str(t, "%H:%M").is_ok());
+        if !(repeat_ok && slot_ok && due_ok) {
             return Err(AppError::invalid("백업 파일 내용이 올바르지 않아요"));
         }
     }
@@ -260,6 +315,40 @@ mod tests {
     }
 
     #[test]
+    fn a_backup_with_a_routine_that_breaks_the_rules_is_rejected() {
+        let src = open_in_memory().unwrap();
+        service::create_routine(&src, input_daily("출결 확인"), at("2026-10-12 09:00")).unwrap();
+        let good = export(&src, "2026-10-12T10:00:00").unwrap();
+        let t = tempfile::tempdir().unwrap();
+        let path = t.path().join("b.json");
+
+        let mut long_title = good.clone();
+        long_title.routines[0].title = "가".repeat(41);
+        write_file(&path, &long_title).unwrap();
+        assert!(read_file(&path).is_err());
+
+        let mut bad_link = good.clone();
+        bad_link.routines[0].link = Some("javascript:alert(1)".into());
+        write_file(&path, &bad_link).unwrap();
+        assert!(read_file(&path).is_err());
+
+        let mut bad_snapshot = good;
+        bad_snapshot.day_items.push(DayItemRow {
+            id: 99,
+            day: "2026-10-12".into(),
+            routine_id: bad_snapshot.routines[0].id,
+            title_snapshot: "x".into(),
+            sort_order: 0,
+            completed_at: None,
+            repeat_type_snapshot: Some("yearly".into()),
+            due_time_snapshot: None,
+            slot_snapshot: None,
+        });
+        write_file(&path, &bad_snapshot).unwrap();
+        assert!(read_file(&path).is_err());
+    }
+
+    #[test]
     fn import_skips_a_vacation_in_the_wrong_order() {
         let src = open_in_memory().unwrap();
         settings::set_vacation(&src, Some(("2027-02-28", "2026-12-24"))).unwrap();
@@ -325,6 +414,9 @@ mod tests {
                 due_time: None,
                 link: None,
                 slot: None,
+                month_day: None,
+                active_from: None,
+                active_until: None,
                 sort_order: 0,
                 created_at: "2026-10-12T00:00:00".into(),
                 archived_at: None,

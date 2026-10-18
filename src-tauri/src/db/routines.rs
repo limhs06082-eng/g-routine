@@ -5,7 +5,8 @@ use crate::domain::day::{fmt_day, parse_day};
 use crate::error::{AppError, AppResult};
 use crate::model::{RepeatType, Routine, RoutineInput, Slot};
 
-const COLS: &str = "id, title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, archived_at, slot";
+const COLS: &str =
+    "id, title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, archived_at, slot, month_day, active_from, active_until";
 const TITLE_MAX: usize = 40;
 
 fn from_row(r: &Row) -> rusqlite::Result<Routine> {
@@ -23,6 +24,9 @@ fn from_row(r: &Row) -> rusqlite::Result<Routine> {
         created_at: r.get(8)?,
         archived_at: r.get(9)?,
         slot: r.get::<_, Option<String>>(10)?.as_deref().and_then(Slot::parse),
+        month_day: r.get::<_, Option<i64>>(11)?.and_then(|d| u8::try_from(d).ok()),
+        active_from: r.get(12)?,
+        active_until: r.get(13)?,
     })
 }
 
@@ -52,8 +56,9 @@ pub fn get(c: &Connection, id: i64) -> AppResult<Routine> {
 pub fn insert(c: &Connection, input: &RoutineInput, now: &str) -> AppResult<i64> {
     let next: i64 = c.query_row("SELECT COALESCE(MAX(sort_order), -1) + 1 FROM routines", [], |r| r.get(0))?;
     c.execute(
-        "INSERT INTO routines (title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, slot)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        "INSERT INTO routines (title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, slot,
+                               month_day, active_from, active_until)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![
             input.title,
             input.repeat_type.as_str(),
@@ -63,7 +68,10 @@ pub fn insert(c: &Connection, input: &RoutineInput, now: &str) -> AppResult<i64>
             input.link,
             next,
             now,
-            input.slot.map(|s| s.as_str())
+            input.slot.map(|s| s.as_str()),
+            input.month_day,
+            input.active_from,
+            input.active_until
         ],
     )?;
     Ok(c.last_insert_rowid())
@@ -71,7 +79,8 @@ pub fn insert(c: &Connection, input: &RoutineInput, now: &str) -> AppResult<i64>
 
 pub fn update(c: &Connection, id: i64, input: &RoutineInput) -> AppResult<()> {
     let n = c.execute(
-        "UPDATE routines SET title = ?2, repeat_type = ?3, weekdays = ?4, once_date = ?5, due_time = ?6, link = ?7, slot = ?8
+        "UPDATE routines SET title = ?2, repeat_type = ?3, weekdays = ?4, once_date = ?5, due_time = ?6, link = ?7, slot = ?8,
+                             month_day = ?9, active_from = ?10, active_until = ?11
          WHERE id = ?1 AND archived_at IS NULL",
         params![
             id,
@@ -81,7 +90,10 @@ pub fn update(c: &Connection, id: i64, input: &RoutineInput) -> AppResult<()> {
             input.once_date,
             input.due_time,
             input.link,
-            input.slot.map(|s| s.as_str())
+            input.slot.map(|s| s.as_str()),
+            input.month_day,
+            input.active_from,
+            input.active_until
         ],
     )?;
     if n == 0 {
@@ -146,21 +158,56 @@ pub fn validate(input: RoutineInput) -> AppResult<RoutineInput> {
             Some(l.to_string())
         }
     };
-    let (weekdays, once_date) = match input.repeat_type {
-        RepeatType::Daily => (0, None),
+    let (weekdays, once_date, month_day) = match input.repeat_type {
+        RepeatType::Daily => (0, None, None),
         RepeatType::Weekdays => {
             let w = input.weekdays & 0x7F;
             if w == 0 {
                 return Err(AppError::invalid("요일을 하나 이상 골라 주세요"));
             }
-            (w, None)
+            (w, None, None)
         }
         RepeatType::Once => {
             let d = input.once_date.as_deref().and_then(parse_day).ok_or_else(|| AppError::invalid("날짜를 골라 주세요"))?;
-            (0, Some(fmt_day(d)))
+            (0, Some(fmt_day(d)), None)
+        }
+        RepeatType::Monthly => {
+            let m = input.month_day.filter(|m| *m <= 31).ok_or_else(|| AppError::invalid("매월 며칠인지 골라 주세요"))?;
+            (0, None, Some(m))
         }
     };
-    Ok(RoutineInput { title, repeat_type: input.repeat_type, weekdays, once_date, due_time, link, slot: input.slot })
+    // 기간 한정: 하루만 할 일은 날짜가 정해져 있어 쓰지 않는다
+    let (active_from, active_until) = if input.repeat_type == RepeatType::Once {
+        (None, None)
+    } else {
+        let from = optional_day(input.active_from.as_deref())?;
+        let until = optional_day(input.active_until.as_deref())?;
+        if let (Some(f), Some(u)) = (from, until) {
+            if f > u {
+                return Err(AppError::invalid("기간의 시작일이 끝나는 날보다 늦어요"));
+            }
+        }
+        (from.map(fmt_day), until.map(fmt_day))
+    };
+    Ok(RoutineInput {
+        title,
+        repeat_type: input.repeat_type,
+        weekdays,
+        once_date,
+        due_time,
+        link,
+        slot: input.slot,
+        month_day,
+        active_from,
+        active_until,
+    })
+}
+
+fn optional_day(s: Option<&str>) -> AppResult<Option<chrono::NaiveDate>> {
+    match s.map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(d) => parse_day(d).map(Some).ok_or_else(|| AppError::invalid("기간 날짜 형식이 올바르지 않아요")),
+    }
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@ use crate::error::{AppError, AppResult};
 use crate::model::{DayItem, DaySummary, Routine, RoutineInput, Settings, TodayView};
 use crate::shell::{self, window};
 use crate::state::{AppState, AppStatus};
-use crate::storage::{export, location};
+use crate::storage::{export, location, offsite};
 use crate::{now, service, startup, DATA_CHANGED};
 
 fn changed(app: &AppHandle) {
@@ -211,6 +211,42 @@ pub fn resize_widget(app: AppHandle, height: f64, width: Option<f64>) -> AppResu
 #[tauri::command]
 pub fn hide_widget(app: AppHandle) {
     window::hide_widget(&app);
+}
+
+/// 두 번째 백업(OneDrive · USB): 지금 상태와, 정하지 않았으면 권할 OneDrive 폴더
+#[tauri::command]
+pub async fn backup2_info(state: State<'_, AppState>) -> AppResult<offsite::Backup2Info> {
+    state.with_conn(|c| offsite::info(c, offsite::onedrive_dir()))
+}
+
+/// 두 번째 백업 폴더를 정하거나(곧바로 한 번 백업한다) 끈다(None)
+#[tauri::command]
+pub async fn set_backup2_dir(state: State<'_, AppState>, dir: Option<String>) -> AppResult<offsite::Backup2Info> {
+    let today = state.with_conn(|c| service::today(c, now()))?;
+    state
+        .with_conn(|c| {
+            offsite::set_dir(c, dir.as_deref().map(Path::new), today, &fmt_ts(now()))?;
+            offsite::info(c, offsite::onedrive_dir())
+        })
+        .inspect(|i| log::info!("두 번째 백업 폴더: {}", if i.dir.is_some() { "정함" } else { "끔" }))
+}
+
+#[tauri::command]
+pub async fn backup2_now(state: State<'_, AppState>) -> AppResult<offsite::Backup2Info> {
+    let today = state.with_conn(|c| service::today(c, now()))?;
+    state.with_conn(|c| {
+        let dir = settings::get(c, settings::BACKUP2_DIR)?.ok_or_else(|| AppError::invalid("백업할 폴더를 먼저 골라 주세요"))?;
+        offsite::write_backup(c, Path::new(&dir), today, &fmt_ts(now()))?;
+        offsite::info(c, offsite::onedrive_dir())
+    })
+}
+
+/// 위젯의 OneDrive 백업 권유 카드를 '나중에'로 닫는다 (설정 탭에서는 계속 보인다)
+#[tauri::command]
+pub async fn dismiss_backup2(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    state.with_conn(|c| settings::set(c, settings::BACKUP2_DISMISSED, "true"))?;
+    changed(&app);
+    Ok(())
 }
 
 /// '문제 보고용 정보 저장': 상태 · 설정 · 데이터 개수 · 최근 로그를 글 파일 하나로 저장한다

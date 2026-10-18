@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use rusqlite::Connection;
 
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 
 pub const DB_FILE: &str = "g-routine.db";
 
@@ -45,6 +45,40 @@ const SCHEMA_V2: &str = "
 ALTER TABLE routines ADD COLUMN slot TEXT CHECK (slot IN ('morning','class','after'));
 ";
 
+/// v3: (1) 반복에 '매월'(month_day: 1–31일, 0은 마지막 날 — 주말 · 공휴일이면 바로 앞 평일로)과
+/// '기간 한정'(active_from ~ active_until)을 더한다. repeat_type의 CHECK를 바꿔야 해서 routines 표를 다시 만든다.
+/// (2) 지난 기록이 루틴을 고쳐도 그대로 남도록 day_items에 반복 종류 · 마감 시각 · 시간대를 함께 적는다.
+/// 예전 버전 앱(복원 프로그램으로 C드라이브가 돌아간 PC)도 새 열을 모르는 채로 그대로 읽고 쓸 수 있다.
+const SCHEMA_V3: &str = "
+CREATE TABLE routines_v3 (
+  id           INTEGER PRIMARY KEY,
+  title        TEXT    NOT NULL,
+  repeat_type  TEXT    NOT NULL CHECK (repeat_type IN ('daily','weekdays','once','monthly')),
+  weekdays     INTEGER NOT NULL DEFAULT 0,
+  once_date    TEXT,
+  due_time     TEXT,
+  link         TEXT,
+  sort_order   INTEGER NOT NULL,
+  created_at   TEXT    NOT NULL,
+  archived_at  TEXT,
+  slot         TEXT CHECK (slot IN ('morning','class','after')),
+  month_day    INTEGER CHECK (month_day BETWEEN 0 AND 31),
+  active_from  TEXT,
+  active_until TEXT
+);
+INSERT INTO routines_v3 (id, title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, archived_at, slot)
+  SELECT id, title, repeat_type, weekdays, once_date, due_time, link, sort_order, created_at, archived_at, slot FROM routines;
+DROP TABLE routines;
+ALTER TABLE routines_v3 RENAME TO routines;
+ALTER TABLE day_items ADD COLUMN repeat_type_snapshot TEXT;
+ALTER TABLE day_items ADD COLUMN due_time_snapshot TEXT;
+ALTER TABLE day_items ADD COLUMN slot_snapshot TEXT;
+UPDATE day_items SET
+  repeat_type_snapshot = (SELECT r.repeat_type FROM routines r WHERE r.id = day_items.routine_id),
+  due_time_snapshot    = (SELECT r.due_time    FROM routines r WHERE r.id = day_items.routine_id),
+  slot_snapshot        = (SELECT r.slot        FROM routines r WHERE r.id = day_items.routine_id);
+";
+
 pub fn open(path: &Path) -> AppResult<Connection> {
     let conn = Connection::open(path)?;
     prepare(&conn)?;
@@ -79,6 +113,23 @@ fn migrate(conn: &Connection) -> AppResult<()> {
         tx.pragma_update(None, "user_version", 2)?;
         tx.commit()?;
     }
+    if version < 3 {
+        // 표를 다시 만드는 동안에는 외래 키 검사를 끈다 (트랜잭션 밖에서만 바꿀 수 있다)
+        conn.pragma_update(None, "foreign_keys", "OFF")?;
+        let result = (|| -> AppResult<()> {
+            let tx = conn.unchecked_transaction()?;
+            tx.execute_batch(SCHEMA_V3)?;
+            let broken: i64 = tx.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| r.get(0))?;
+            if broken > 0 {
+                return Err(AppError::invalid("데이터 구조를 바꾸지 못했어요"));
+            }
+            tx.pragma_update(None, "user_version", 3)?;
+            tx.commit()?;
+            Ok(())
+        })();
+        conn.pragma_update(None, "foreign_keys", "ON")?;
+        result?;
+    }
     Ok(())
 }
 
@@ -97,7 +148,7 @@ mod tests {
         let conn = open_in_memory().unwrap();
         migrate(&conn).unwrap(); // 두 번째 호출은 아무것도 하지 않아야 한다
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
         let tables: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('routines','day_items','settings')",
@@ -122,7 +173,7 @@ mod tests {
 
         migrate(&conn).unwrap();
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
         let list = routines::list_unarchived(&conn).unwrap();
         assert_eq!((list[0].title.as_str(), list[0].slot), ("출결 확인", None));
         // 정해진 값 말고는 넣을 수 없다
@@ -138,6 +189,55 @@ mod tests {
     }
 
     #[test]
+    fn upgrading_a_v2_database_rebuilds_routines_and_fills_snapshots() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA_V1).unwrap();
+        conn.execute_batch(SCHEMA_V2).unwrap();
+        conn.pragma_update(None, "user_version", 2).unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        conn.execute(
+            "INSERT INTO routines (title, repeat_type, due_time, slot, sort_order, created_at)
+             VALUES ('출결 확인', 'daily', '09:00', 'morning', 0, '2026-10-01T09:00:00')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO day_items (day, routine_id, title_snapshot, sort_order, completed_at)
+             VALUES ('2026-10-12', 1, '출결 확인', 0, '2026-10-12T08:40:00')",
+            [],
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(version, 3);
+        let list = routines::list_unarchived(&conn).unwrap();
+        assert_eq!((list[0].title.as_str(), list[0].due_time.as_deref()), ("출결 확인", Some("09:00")));
+        let snap: (String, String, String) = conn
+            .query_row("SELECT repeat_type_snapshot, due_time_snapshot, slot_snapshot FROM day_items", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
+            .unwrap();
+        assert_eq!(snap, ("daily".into(), "09:00".into(), "morning".into()));
+        // 이제 '매월'을 넣을 수 있고, 외래 키 검사도 다시 켜져 있다
+        conn.execute(
+            "INSERT INTO routines (title, repeat_type, month_day, sort_order, created_at) VALUES ('월말 정리', 'monthly', 0, 1, '2026-10-02')",
+            [],
+        )
+        .unwrap();
+        assert!(conn
+            .execute("INSERT INTO day_items (day, routine_id, title_snapshot, sort_order) VALUES ('2026-10-12', 99, 'x', 0)", [])
+            .is_err());
+        // 복원 프로그램으로 돌아간 예전 버전은 새 열 없이 넣는다. 그래도 된다
+        conn.execute(
+            "INSERT INTO day_items (day, routine_id, title_snapshot, sort_order) VALUES ('2026-10-13', 1, '출결 확인', 0)",
+            [],
+        )
+        .unwrap();
+        assert!(integrity_ok(&conn).unwrap());
+    }
+
+    #[test]
     fn file_backed_migration_survives_reopen() {
         let dir = tempdir().unwrap();
         let db_path = dir.path().join("test.db");
@@ -146,7 +246,7 @@ mod tests {
         {
             let conn = open(&db_path).unwrap();
             let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-            assert_eq!(version, 2);
+            assert_eq!(version, 3);
             assert!(integrity_ok(&conn).unwrap());
         }
 
@@ -154,7 +254,7 @@ mod tests {
         {
             let conn = open(&db_path).unwrap();
             let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-            assert_eq!(version, 2);
+            assert_eq!(version, 3);
             let tables: i64 = conn
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('routines','day_items','settings')",

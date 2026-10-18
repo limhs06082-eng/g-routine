@@ -25,10 +25,16 @@ pub const WINDOW_BOTTOM: &str = "window_bottom";
 pub const SYNCED_DAY: &str = "synced_day";
 /// 내려받은 공휴일 표 (shell::holidays)
 pub const HOLIDAYS_CACHE: &str = "holidays_cache";
+/// 두 번째 백업 폴더 · 마지막으로 백업한 날 · 권유 카드를 닫았는지 (storage::offsite)
+pub const BACKUP2_DIR: &str = "backup2_dir";
+pub const BACKUP2_LAST: &str = "backup2_last";
+pub const BACKUP2_DISMISSED: &str = "backup2_dismissed";
 /// 이 PC에만 해당하는 키: 백업 파일에 넣지 않는다
-pub const PC_ONLY_KEYS: [&str; 5] = [WINDOW_X, WINDOW_BOTTOM, SYNCED_DAY, HOLIDAYS_CACHE, SEEN_VERSION];
+pub const PC_ONLY_KEYS: [&str; 8] =
+    [WINDOW_X, WINDOW_BOTTOM, SYNCED_DAY, HOLIDAYS_CACHE, SEEN_VERSION, BACKUP2_DIR, BACKUP2_LAST, BACKUP2_DISMISSED];
 /// 백업을 불러와도 지우지 않는 키 (synced_day는 지우고 불러온 기록에서 다시 정한다)
-pub const KEPT_ON_IMPORT: [&str; 4] = [WINDOW_X, WINDOW_BOTTOM, HOLIDAYS_CACHE, SEEN_VERSION];
+pub const KEPT_ON_IMPORT: [&str; 7] =
+    [WINDOW_X, WINDOW_BOTTOM, HOLIDAYS_CACHE, SEEN_VERSION, BACKUP2_DIR, BACKUP2_LAST, BACKUP2_DISMISSED];
 
 pub fn get(c: &Connection, key: &str) -> AppResult<Option<String>> {
     Ok(c.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0)).optional()?)

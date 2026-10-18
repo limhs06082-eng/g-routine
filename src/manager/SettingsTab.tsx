@@ -8,6 +8,7 @@ import { api, errorMessage, type AppStatus, type HolidayCoverage, type SettingKe
 import { cn } from "@/lib/utils";
 import { formatHour } from "./calendar";
 import { todayString } from "./routines";
+import { SecondBackup } from "./SecondBackup";
 import { VacationSetting } from "./VacationSetting";
 
 const THEMES: { value: ThemeName; label: string; color: string }[] = [
@@ -204,6 +205,7 @@ export function SettingsTab({ settings, status, onChange }: Props) {
           복원 프로그램이 있는 PC는 D드라이브 같은 보존되는 위치에 저장하세요.
         </p>
       </div>
+      <SecondBackup run={run} />
       <div className="flex gap-2 py-4">
         <Button variant="outline" size="sm" onClick={() => void exportBackup()}>
           <Download />

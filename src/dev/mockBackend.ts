@@ -39,6 +39,7 @@ const doneAt = new Map<number, string>([[2, `${TODAY}T08:55:00`]]);
 let settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, miniMode: false, vacationStart: null, vacationEnd: null, seenVersion: null };
 let ready = new URLSearchParams(window.location.search).get("setup") !== "1";
 const DATA_DIR = "D:\\G-routine\\data";
+let backup2 = { dir: null as string | null, last: null as string | null, suggested: "C:\\Users\\선생님\\OneDrive" as string | null, dismissed: false };
 
 function bit(day: string) {
   const [y, m, d] = day.split("-").map(Number);
@@ -213,6 +214,21 @@ export function installMockBackend() {
         changed();
         return settings;
       }
+      case "backup2_info":
+        return backup2;
+      case "set_backup2_dir": {
+        const dir = (args.dir as string | null) ?? null;
+        backup2 = dir ? { ...backup2, dir, last: TODAY, suggested: null } : { ...backup2, dir: null, last: null, suggested: "C:\\Users\\선생님\\OneDrive" };
+        changed();
+        return backup2;
+      }
+      case "backup2_now":
+        backup2 = { ...backup2, last: TODAY };
+        return backup2;
+      case "dismiss_backup2":
+        backup2 = { ...backup2, dismissed: true };
+        changed();
+        return null;
       case "save_diagnostics":
         console.info("[mock] save_diagnostics", args.path);
         return null;

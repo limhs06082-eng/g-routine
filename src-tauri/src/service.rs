@@ -95,6 +95,9 @@ pub fn quick_add(c: &Connection, title: &str, now: NaiveDateTime) -> AppResult<(
         due_time: None,
         link: None,
         slot: None,
+        month_day: None,
+        active_from: None,
+        active_until: None,
     };
     create_routine(c, input, now).map(|_| ())
 }
@@ -570,5 +573,46 @@ mod tests {
         update_routine(&c, id, input_daily("출결 확인 (NEIS)"), at(MON)).unwrap();
         assert!(total_changes(&c) > before);
         assert_eq!(titles(&get_today(&c, at(MON)).unwrap().pending), vec!["출결 확인 (NEIS)"]);
+    }
+
+    #[test]
+    fn past_records_keep_the_due_time_and_slot_they_had() {
+        let c = open_in_memory().unwrap();
+        let input = RoutineInput { due_time: Some("09:00".into()), slot: Some(Slot::Morning), ..input_daily("출결 확인") };
+        let id = create_routine(&c, input, at(MON)).unwrap();
+        let v = get_today(&c, at(MON)).unwrap();
+        set_done(&c, v.pending[0].id, true, at(MON)).unwrap();
+
+        // 화요일에 루틴을 고쳐도 월요일 기록은 그때 값 그대로
+        let changed = RoutineInput { due_time: Some("10:30".into()), slot: Some(Slot::After), ..input_daily("출결 확인") };
+        update_routine(&c, id, changed, at(TUE)).unwrap();
+        let monday = history_day(&c, "2026-10-12").unwrap();
+        assert_eq!((monday[0].due_time.as_deref(), monday[0].slot), (Some("09:00"), Some(Slot::Morning)));
+        // 오늘(화요일) 할 일은 새 값을 따른다
+        let today = get_today(&c, at(TUE)).unwrap();
+        assert_eq!((today.pending[0].due_time.as_deref(), today.pending[0].slot), (Some("10:30"), Some(Slot::After)));
+    }
+
+    #[test]
+    fn a_monthly_routine_shows_on_the_weekday_before_a_holiday() {
+        let c = open_in_memory().unwrap();
+        let input = RoutineInput { repeat_type: RepeatType::Monthly, month_day: Some(10), ..input_daily("월례 보고") };
+        create_routine(&c, input, at("2026-10-01 09:00")).unwrap();
+        // 10월 10일(토) → 9일(금, 한글날) → 8일(목)
+        assert_eq!(titles(&get_today(&c, at("2026-10-08 09:00")).unwrap().pending), vec!["월례 보고"]);
+        assert!(get_today(&c, at("2026-10-12 09:00")).unwrap().pending.is_empty());
+    }
+
+    #[test]
+    fn monthly_and_period_inputs_are_checked() {
+        let c = open_in_memory().unwrap();
+        let no_day = RoutineInput { repeat_type: RepeatType::Monthly, ..input_daily("월례 보고") };
+        assert!(create_routine(&c, no_day, at(MON)).is_err());
+        let reversed = RoutineInput {
+            active_from: Some("2026-12-01".into()),
+            active_until: Some("2026-11-01".into()),
+            ..input_daily("방과후")
+        };
+        assert!(create_routine(&c, reversed, at(MON)).is_err());
     }
 }

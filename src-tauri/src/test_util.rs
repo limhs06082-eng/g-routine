@@ -19,6 +19,9 @@ pub fn input_daily(title: &str) -> RoutineInput {
         due_time: None,
         link: None,
         slot: None,
+        month_day: None,
+        active_from: None,
+        active_until: None,
     }
 }
 
@@ -40,6 +43,9 @@ pub fn routine(id: i64, title: &str, repeat_type: RepeatType, weekdays: u8, once
         due_time: None,
         link: None,
         slot: None,
+        month_day: None,
+        active_from: None,
+        active_until: None,
         sort_order: id,
         created_at: "2026-10-01T09:00:00".into(),
         archived_at: None,

@@ -10,8 +10,13 @@ use crate::domain::rules::scheduled;
 use crate::error::{AppError, AppResult};
 use crate::model::{DayItem, DaySummary, RepeatType, Routine, Slot};
 
+/// 반복 종류 · 마감 시각 · 시간대는 그날 적어 둔 값을 쓴다 (루틴을 고쳐도 지난 기록은 그대로).
+/// 적어 둔 값이 없는 줄(예전 버전이 넣은 줄)만 지금 루틴 값을 쓴다. repeat_type_snapshot이 '적어 둠' 표시다.
 const ITEM_SELECT: &str = "SELECT d.id, d.day, d.routine_id, d.title_snapshot, d.sort_order, d.completed_at,
-        r.repeat_type, r.due_time, r.link, r.slot
+        COALESCE(d.repeat_type_snapshot, r.repeat_type),
+        CASE WHEN d.repeat_type_snapshot IS NULL THEN r.due_time ELSE d.due_time_snapshot END,
+        r.link,
+        CASE WHEN d.repeat_type_snapshot IS NULL THEN r.slot ELSE d.slot_snapshot END
    FROM day_items d JOIN routines r ON r.id = d.routine_id";
 
 fn item_from_row(r: &Row) -> rusqlite::Result<DayItem> {
@@ -61,6 +66,12 @@ struct Existing {
     title: String,
     sort_order: i64,
     done: bool,
+    /// 적어 둔 (반복 종류, 마감 시각, 시간대)
+    snapshot: (Option<String>, Option<String>, Option<String>),
+}
+
+fn snapshot_of(r: &Routine) -> (Option<String>, Option<String>, Option<String>) {
+    (Some(r.repeat_type.as_str().to_string()), r.due_time.clone(), r.slot.map(|s| s.as_str().to_string()))
 }
 
 /// 맞추려면 바꿔야 할 것
@@ -68,6 +79,7 @@ enum Change<'a> {
     Insert(&'a Routine),
     Sort(i64, i64),
     Title(i64, &'a str),
+    Snapshot(i64, &'a Routine),
     Delete(i64),
 }
 
@@ -83,6 +95,9 @@ fn plan<'a>(existing: &HashMap<i64, Existing>, sched: &[&'a Routine]) -> Vec<Cha
                 // 끝낸 항목은 그때의 이름을 그대로 남긴다
                 if !e.done && e.title != r.title {
                     changes.push(Change::Title(e.id, &r.title));
+                }
+                if !e.done && e.snapshot != snapshot_of(r) {
+                    changes.push(Change::Snapshot(e.id, r));
                 }
             }
         }
@@ -111,11 +126,22 @@ pub fn sync_day(c: &Connection, day: NaiveDate, rest: Option<RestKind>) -> AppRe
     let sched = scheduled(&all, day, rest);
     let existing: HashMap<i64, Existing> = {
         let mut st = c.prepare(
-            "SELECT id, routine_id, title_snapshot, sort_order, completed_at IS NOT NULL FROM day_items WHERE day = ?1",
+            "SELECT id, routine_id, title_snapshot, sort_order, completed_at IS NOT NULL,
+                    repeat_type_snapshot, due_time_snapshot, slot_snapshot
+               FROM day_items WHERE day = ?1",
         )?;
         let rows = st
             .query_map([&d], |r| {
-                Ok((r.get::<_, i64>(1)?, Existing { id: r.get(0)?, title: r.get(2)?, sort_order: r.get(3)?, done: r.get(4)? }))
+                Ok((
+                    r.get::<_, i64>(1)?,
+                    Existing {
+                        id: r.get(0)?,
+                        title: r.get(2)?,
+                        sort_order: r.get(3)?,
+                        done: r.get(4)?,
+                        snapshot: (r.get(5)?, r.get(6)?, r.get(7)?),
+                    },
+                ))
             })?
             .collect::<Result<HashMap<_, _>, _>>()?;
         rows
@@ -134,9 +160,11 @@ pub fn sync_day(c: &Connection, day: NaiveDate, rest: Option<RestKind>) -> AppRe
     for change in changes {
         match change {
             Change::Insert(r) => {
+                let (repeat, due, slot) = snapshot_of(r);
                 tx.execute(
-                    "INSERT INTO day_items (day, routine_id, title_snapshot, sort_order) VALUES (?1, ?2, ?3, ?4)",
-                    params![d, r.id, r.title, r.sort_order],
+                    "INSERT INTO day_items (day, routine_id, title_snapshot, sort_order, repeat_type_snapshot, due_time_snapshot, slot_snapshot)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![d, r.id, r.title, r.sort_order, repeat, due, slot],
                 )?;
             }
             Change::Sort(id, sort) => {
@@ -144,6 +172,13 @@ pub fn sync_day(c: &Connection, day: NaiveDate, rest: Option<RestKind>) -> AppRe
             }
             Change::Title(id, title) => {
                 tx.execute("UPDATE day_items SET title_snapshot = ?2 WHERE id = ?1", params![id, title])?;
+            }
+            Change::Snapshot(id, r) => {
+                let (repeat, due, slot) = snapshot_of(r);
+                tx.execute(
+                    "UPDATE day_items SET repeat_type_snapshot = ?2, due_time_snapshot = ?3, slot_snapshot = ?4 WHERE id = ?1",
+                    params![id, repeat, due, slot],
+                )?;
             }
             Change::Delete(id) => {
                 tx.execute("DELETE FROM day_items WHERE id = ?1", [id])?;

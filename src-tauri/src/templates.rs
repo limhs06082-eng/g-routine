@@ -15,6 +15,9 @@ fn item(title: &str, repeat_type: RepeatType, weekdays: u8, slot: Slot, link: Op
         due_time: None,
         link: link.map(String::from),
         slot: Some(slot),
+        month_day: None,
+        active_from: None,
+        active_until: None,
     }
 }
 

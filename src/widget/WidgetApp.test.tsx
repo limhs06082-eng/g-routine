@@ -11,6 +11,9 @@ const apiMock = vi.hoisted(() => ({
   setSetting: vi.fn(),
   today: vi.fn(),
   resizeWidget: vi.fn(() => Promise.resolve(false)),
+  backup2Info: vi.fn(),
+  setBackup2Dir: vi.fn(),
+  dismissBackup2: vi.fn(),
   installUpdate: vi.fn(),
 }));
 
@@ -29,6 +32,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   apiMock.status.mockResolvedValue(status);
   apiMock.today.mockResolvedValue(view);
+  apiMock.backup2Info.mockResolvedValue({ dir: null, last: null, suggested: null, dismissed: false });
 });
 
 test("after an update the widget shows what changed once, until confirmed", async () => {
@@ -80,4 +84,25 @@ test("mini mode shows only the pill", async () => {
   render(<WidgetApp />);
   expect(await screen.findByRole("button", { name: /크게 보기/ })).toBeInTheDocument();
   expect(screen.queryByText("오늘의 루틴")).not.toBeInTheDocument();
+});
+
+test("a PC with OneDrive is offered a weekly backup once", async () => {
+  const user = userEvent.setup();
+  apiMock.settings.mockResolvedValue({ ...settings, seenVersion: "9.9.9" });
+  apiMock.backup2Info.mockResolvedValueOnce({ dir: null, last: null, suggested: "C:/Users/t/OneDrive", dismissed: false });
+  apiMock.setBackup2Dir.mockResolvedValue({ dir: "C:/Users/t/OneDrive", last: "2026-10-12", suggested: null, dismissed: false });
+  render(<WidgetApp />);
+  const card = await screen.findByRole("region", { name: "OneDrive 백업 권유" });
+  expect(card).toHaveTextContent("OneDrive에 백업해 둘까요?");
+  await user.click(screen.getByRole("button", { name: "백업하기" }));
+  expect(apiMock.setBackup2Dir).toHaveBeenCalledWith("C:/Users/t/OneDrive");
+  await waitFor(() => expect(screen.queryByRole("region", { name: "OneDrive 백업 권유" })).not.toBeInTheDocument());
+});
+
+test("the backup offer stays away once dismissed or already set up", async () => {
+  apiMock.settings.mockResolvedValue({ ...settings, seenVersion: "9.9.9" });
+  apiMock.backup2Info.mockResolvedValue({ dir: null, last: null, suggested: "C:/Users/t/OneDrive", dismissed: true });
+  render(<WidgetApp />);
+  expect(await screen.findByText("오늘의 루틴")).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "OneDrive 백업 권유" })).not.toBeInTheDocument();
 });
