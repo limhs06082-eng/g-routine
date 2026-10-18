@@ -33,12 +33,30 @@ pub enum InstallAction {
     Notify,
 }
 
-/// 켜진 직후 첫 확인에서만 스스로 설치하고, 그 뒤 확인은 알리기만 한다.
-pub fn install_action(first_check: bool) -> InstallAction {
-    if first_check {
+/// 켜진 뒤 이 시간 안에 처음 성공한 확인에서만 스스로 설치한다 (수업 중에 갑자기 꺼지지 않게)
+const AUTO_INSTALL_WINDOW: Duration = Duration::from_secs(10 * 60);
+/// 아직 한 번도 확인하지 못했을 때 다시 시도하는 간격 (학교 네트워크 로그온이 늦는 PC)
+const RETRY_SOON: Duration = Duration::from_secs(2 * 60);
+const RETRY_LATER: Duration = Duration::from_secs(30 * 60);
+
+/// 켜진 직후(첫 10분)의 첫 성공한 확인에서만 스스로 설치하고, 그 뒤 확인은 알리기만 한다.
+/// 복원 프로그램이 예전 버전으로 되돌린 PC가 새 DB를 예전 앱으로 오래 쓰지 않도록, 처음 확인이 실패하면 곧 다시 시도한다.
+pub fn install_action(checked_once: bool, since_launch: Duration) -> InstallAction {
+    if !checked_once && since_launch < AUTO_INSTALL_WINDOW {
         InstallAction::InstallNow
     } else {
         InstallAction::Notify
+    }
+}
+
+/// 다음 확인까지 기다릴 시간
+pub fn next_wait(checked_once: bool, since_launch: Duration) -> Duration {
+    if checked_once {
+        INTERVAL
+    } else if since_launch < AUTO_INSTALL_WINDOW {
+        RETRY_SOON
+    } else {
+        RETRY_LATER
     }
 }
 
@@ -48,13 +66,17 @@ pub fn spawn_update_checker(app: AppHandle) {
         return;
     }
     std::thread::spawn(move || {
+        let launched = std::time::Instant::now();
         std::thread::sleep(FIRST_CHECK);
-        let mut first = true;
+        let mut checked_once = false;
         loop {
-            // 네트워크가 없거나 GitHub에 닿지 않으면 다음 주기에 다시 시도한다.
-            let _ = tauri::async_runtime::block_on(check(&app, install_action(first)));
-            first = false;
-            std::thread::sleep(INTERVAL);
+            let action = install_action(checked_once, launched.elapsed());
+            match tauri::async_runtime::block_on(check(&app, action)) {
+                Ok(()) => checked_once = true,
+                // 네트워크가 없거나 GitHub에 닿지 않으면 곧 다시 시도한다
+                Err(e) => log::info!("새 버전을 확인하지 못했어요: {e}"),
+            }
+            std::thread::sleep(next_wait(checked_once, launched.elapsed()));
         }
     });
 }
@@ -90,13 +112,23 @@ pub async fn install_now(app: &AppHandle) -> tauri_plugin_updater::Result<bool> 
 
 #[cfg(test)]
 mod tests {
-    use super::{auto_update_enabled, install_action, InstallAction};
+    use super::{auto_update_enabled, install_action, next_wait, InstallAction, INTERVAL};
+    use std::time::Duration;
 
     #[test]
-    fn only_the_first_check_after_launch_installs_by_itself() {
-        // 켜진 직후(PC를 막 켠 때)는 설치해도 되지만, 그 뒤 주기 확인은 사용자에게 알리기만 한다
-        assert_eq!(install_action(true), InstallAction::InstallNow);
-        assert_eq!(install_action(false), InstallAction::Notify);
+    fn only_the_first_successful_check_soon_after_launch_installs_by_itself() {
+        let min = |m: u64| Duration::from_secs(m * 60);
+        // 켜진 직후(PC를 막 켠 때)는 설치해도 된다
+        assert_eq!(install_action(false, Duration::from_secs(20)), InstallAction::InstallNow);
+        // 첫 확인이 실패했어도 10분 안이면 다시 시도해 설치한다 (늦게 붙는 학교 네트워크)
+        assert_eq!(install_action(false, min(6)), InstallAction::InstallNow);
+        // 한 번 확인한 뒤나, 켜진 지 오래되면(수업 중일 수 있다) 알리기만 한다
+        assert_eq!(install_action(true, min(1)), InstallAction::Notify);
+        assert_eq!(install_action(false, min(40)), InstallAction::Notify);
+        // 아직 확인을 못 했으면 곧 다시 시도하고, 확인했으면 6시간 뒤
+        assert_eq!(next_wait(false, min(1)), min(2));
+        assert_eq!(next_wait(false, min(40)), min(30));
+        assert_eq!(next_wait(true, min(1)), INTERVAL);
     }
 
     #[test]

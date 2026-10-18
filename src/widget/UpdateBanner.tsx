@@ -25,8 +25,8 @@ export function UpdateBanner({ version }: { version: string }) {
 
   return (
     <section aria-label="새 버전 안내" className="mx-2.5 mb-2 rounded-lg bg-soft/60 px-3 py-2 text-xs">
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1 whitespace-nowrap text-ink">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <span className="flex items-center gap-1 text-ink">
           <Download className="size-3.5 shrink-0 text-primary" />
           새 버전 v{version} 준비됐어요
         </span>

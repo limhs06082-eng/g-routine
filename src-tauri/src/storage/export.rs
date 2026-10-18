@@ -159,7 +159,7 @@ fn validate(b: &BackupFile) -> AppResult<()> {
 
     // Validate routines
     let mut routine_ids = HashSet::new();
-    for r in &b.routines {
+    for (n, r) in b.routines.iter().enumerate() {
         // Check weekdays is valid (0-127)
         if r.weekdays > 0x7F {
             return Err(AppError::invalid("백업 파일 내용이 올바르지 않아요"));
@@ -192,8 +192,13 @@ fn validate(b: &BackupFile) -> AppResult<()> {
             active_from: r.active_from.clone(),
             active_until: r.active_until.clone(),
         };
+        // 지운(보관한) 루틴은 예전 버전의 느슨한 불러오기로 들어온 것일 수 있어 건너뛴다 (기록 표시에만 쓰인다)
+        if r.archived_at.is_some() {
+            continue;
+        }
         if let Err(e) = routines::validate(input) {
-            return Err(AppError::invalid(format!("백업 파일의 루틴 ‘{}’을(를) 불러올 수 없어요: {e}", r.title)));
+            // 루틴 이름은 로그(문제 보고 파일)에 남지 않도록 순서만 알려 준다
+            return Err(AppError::invalid(format!("백업 파일의 {}번째 루틴을 불러올 수 없어요: {e}", n + 1)));
         }
     }
 
@@ -346,6 +351,22 @@ mod tests {
         });
         write_file(&path, &bad_snapshot).unwrap();
         assert!(read_file(&path).is_err());
+    }
+
+    #[test]
+    fn an_old_archived_routine_that_breaks_todays_rules_still_loads() {
+        let src = open_in_memory().unwrap();
+        service::create_routine(&src, input_daily("출결 확인"), at("2026-10-12 09:00")).unwrap();
+        let mut b = export(&src, "2026-10-12T10:00:00").unwrap();
+        // 예전의 느슨한 불러오기로 들어온, 지금 규칙에는 맞지 않는 보관된 루틴
+        b.routines[0].title = "가".repeat(45);
+        b.routines[0].archived_at = Some("2026-10-12T11:00:00".into());
+        let dst = open_in_memory().unwrap();
+        let t = tempfile::tempdir().unwrap();
+        let path = t.path().join("b.json");
+        write_file(&path, &b).unwrap();
+        import(&dst, &read_file(&path).unwrap()).unwrap();
+        assert!(routines::list_unarchived(&dst).unwrap().is_empty());
     }
 
     #[test]

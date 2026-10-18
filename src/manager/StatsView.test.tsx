@@ -5,7 +5,7 @@ import type { Stats } from "@/lib/api";
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(() => Promise.resolve(() => {})) }));
 const dialogMock = vi.hoisted(() => ({ save: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => dialogMock);
-const apiMock = vi.hoisted(() => ({ historyStats: vi.fn(), exportCsv: vi.fn() }));
+const apiMock = vi.hoisted(() => ({ historyStats: vi.fn(), exportCsv: vi.fn(), today: vi.fn(() => new Promise(() => {})) }));
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
   api: apiMock,

@@ -10,12 +10,18 @@ export function useData<T>(load: () => Promise<T>, deps: unknown[] = []) {
   const [error, setError] = useState<string | null>(null);
   const loadRef = useRef(load);
   loadRef.current = load;
+  // 기간을 빠르게 바꾸는 등으로 응답이 순서가 뒤바뀌어 와도 마지막 요청의 응답만 쓴다
+  const seq = useRef(0);
 
   const reload = useCallback(async () => {
+    const mine = ++seq.current;
     try {
-      setData(await loadRef.current());
+      const value = await loadRef.current();
+      if (mine !== seq.current) return;
+      setData(value);
       setError(null);
     } catch (e) {
+      if (mine !== seq.current) return;
       setError(errorMessage(e));
     }
   }, []);
@@ -106,7 +112,9 @@ export function useAutoResize<T extends HTMLElement>(normalWidth: number | null 
     if (!el || typeof ResizeObserver === "undefined") return;
     let last = "";
     let watchedPill: Element | null = null;
-    const ro = new ResizeObserver(() => {
+    let frame = 0;
+    const report = () => {
+      frame = 0;
       const pill = el.querySelector("[data-mini-pill]");
       if (pill && pill !== watchedPill) {
         watchedPill = pill;
@@ -123,9 +131,15 @@ export function useAutoResize<T extends HTMLElement>(normalWidth: number | null 
           .then((c) => setCapped(Boolean(c)))
           .catch(() => {});
       }
+    };
+    const ro = new ResizeObserver(() => {
+      if (!frame) frame = requestAnimationFrame(report);
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
   }, [normalWidth]);
   return { ref, capped };
 }

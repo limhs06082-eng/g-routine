@@ -43,6 +43,8 @@ pub struct AppState {
     pub autostart_failed: AtomicBool,
     /// 설치를 기다리는 새 버전 (같은 이유로 따로 둔다)
     pending_update: Mutex<Option<String>>,
+    /// 시작 설정 · 복구 · 다시 시도 · 저장 위치 변경 · 백업 불러오기는 한 번에 하나씩만 (두 번 눌러도 겹치지 않게)
+    lifecycle: Mutex<()>,
 }
 
 impl AppState {
@@ -58,6 +60,7 @@ impl AppState {
             shortcut: AtomicBool::new(false),
             autostart_failed: AtomicBool::new(false),
             pending_update: Mutex::new(None),
+            lifecycle: Mutex::new(()),
         }
     }
 
@@ -104,6 +107,11 @@ impl AppState {
         if let Ok(mut g) = self.status.lock() {
             f(&mut g);
         }
+    }
+
+    /// 한 번에 하나만 해야 하는 일(시작 설정 · 복구 등)의 차례를 기다린다
+    pub fn one_at_a_time(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.lifecycle.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn data_dir(&self) -> Option<PathBuf> {

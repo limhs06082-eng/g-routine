@@ -46,12 +46,23 @@ pub const HOLIDAYS_CACHE: &str = "holidays_cache";
 pub const BACKUP2_DIR: &str = "backup2_dir";
 pub const BACKUP2_LAST: &str = "backup2_last";
 pub const BACKUP2_DISMISSED: &str = "backup2_dismissed";
+/// 마지막 자동 백업이 실패했을 때의 안내 (잘 되면 지운다)
+pub const BACKUP2_ERROR: &str = "backup2_error";
 /// 이 PC에만 해당하는 키: 백업 파일에 넣지 않는다
-pub const PC_ONLY_KEYS: [&str; 8] =
-    [WINDOW_X, WINDOW_BOTTOM, SYNCED_DAY, HOLIDAYS_CACHE, SEEN_VERSION, BACKUP2_DIR, BACKUP2_LAST, BACKUP2_DISMISSED];
+pub const PC_ONLY_KEYS: [&str; 9] = [
+    WINDOW_X,
+    WINDOW_BOTTOM,
+    SYNCED_DAY,
+    HOLIDAYS_CACHE,
+    SEEN_VERSION,
+    BACKUP2_DIR,
+    BACKUP2_LAST,
+    BACKUP2_DISMISSED,
+    BACKUP2_ERROR,
+];
 /// 백업을 불러와도 지우지 않는 키 (synced_day는 지우고 불러온 기록에서 다시 정한다)
-pub const KEPT_ON_IMPORT: [&str; 7] =
-    [WINDOW_X, WINDOW_BOTTOM, HOLIDAYS_CACHE, SEEN_VERSION, BACKUP2_DIR, BACKUP2_LAST, BACKUP2_DISMISSED];
+pub const KEPT_ON_IMPORT: [&str; 8] =
+    [WINDOW_X, WINDOW_BOTTOM, HOLIDAYS_CACHE, SEEN_VERSION, BACKUP2_DIR, BACKUP2_LAST, BACKUP2_DISMISSED, BACKUP2_ERROR];
 
 pub fn get(c: &Connection, key: &str) -> AppResult<Option<String>> {
     Ok(c.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0)).optional()?)

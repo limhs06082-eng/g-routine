@@ -32,7 +32,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   apiMock.status.mockResolvedValue(status);
   apiMock.today.mockResolvedValue(view);
-  apiMock.backup2Info.mockResolvedValue({ dir: null, last: null, suggested: null, dismissed: false });
+  apiMock.backup2Info.mockResolvedValue({ dir: null, last: null, suggested: null, dismissed: false, warning: null, error: null });
 });
 
 test("after an update the widget shows what changed once, until confirmed", async () => {
@@ -89,8 +89,8 @@ test("mini mode shows only the pill", async () => {
 test("a PC with OneDrive is offered a weekly backup once", async () => {
   const user = userEvent.setup();
   apiMock.settings.mockResolvedValue({ ...settings, seenVersion: "9.9.9" });
-  apiMock.backup2Info.mockResolvedValueOnce({ dir: null, last: null, suggested: "C:/Users/t/OneDrive", dismissed: false });
-  apiMock.setBackup2Dir.mockResolvedValue({ dir: "C:/Users/t/OneDrive", last: "2026-10-12", suggested: null, dismissed: false });
+  apiMock.backup2Info.mockResolvedValueOnce({ dir: null, last: null, suggested: "C:/Users/t/OneDrive", dismissed: false, warning: null, error: null });
+  apiMock.setBackup2Dir.mockResolvedValue({ dir: "C:/Users/t/OneDrive", last: "2026-10-12", suggested: null, dismissed: false, warning: null, error: null });
   render(<WidgetApp />);
   const card = await screen.findByRole("region", { name: "OneDrive 백업 권유" });
   expect(card).toHaveTextContent("OneDrive에 백업해 둘까요?");
@@ -101,8 +101,27 @@ test("a PC with OneDrive is offered a weekly backup once", async () => {
 
 test("the backup offer stays away once dismissed or already set up", async () => {
   apiMock.settings.mockResolvedValue({ ...settings, seenVersion: "9.9.9" });
-  apiMock.backup2Info.mockResolvedValue({ dir: null, last: null, suggested: "C:/Users/t/OneDrive", dismissed: true });
+  apiMock.backup2Info.mockResolvedValue({ dir: null, last: null, suggested: "C:/Users/t/OneDrive", dismissed: true, warning: null, error: null });
   render(<WidgetApp />);
   expect(await screen.findByText("오늘의 루틴")).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "OneDrive 백업 권유" })).not.toBeInTheDocument();
+});
+
+test("the backup offer can be declined and waits while an update is pending", async () => {
+  const user = userEvent.setup();
+  apiMock.settings.mockResolvedValue({ ...settings, seenVersion: "9.9.9" });
+  apiMock.backup2Info.mockResolvedValue({ dir: null, last: null, suggested: "C:/Users/t/OneDrive", dismissed: false, warning: null, error: null });
+  apiMock.dismissBackup2.mockResolvedValue(undefined);
+  render(<WidgetApp />);
+  await user.click(await screen.findByRole("button", { name: "괜찮아요" }));
+  expect(apiMock.dismissBackup2).toHaveBeenCalledTimes(1);
+});
+
+test("an update notice comes before the backup offer", async () => {
+  apiMock.status.mockResolvedValue({ ...status, pendingUpdate: "0.4.1" });
+  apiMock.settings.mockResolvedValue({ ...settings, seenVersion: "9.9.9" });
+  apiMock.backup2Info.mockResolvedValue({ dir: null, last: null, suggested: "C:/Users/t/OneDrive", dismissed: false, warning: null, error: null });
+  render(<WidgetApp />);
+  expect(await screen.findByRole("region", { name: "새 버전 안내" })).toBeInTheDocument();
   expect(screen.queryByRole("region", { name: "OneDrive 백업 권유" })).not.toBeInTheDocument();
 });

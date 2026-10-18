@@ -109,8 +109,12 @@ export interface Backup2Info {
   last: string | null;
   /** 아직 정하지 않았을 때 먼저 권할 OneDrive 폴더 */
   suggested: string | null;
-  /** 위젯의 권유 카드를 '나중에'로 닫았는지 */
+  /** 위젯의 권유 카드를 닫았는지 (폴더를 한 번 정했어도 다시 묻지 않는다) */
   dismissed: boolean;
+  /** 고른 폴더가 알맞지 않을 때의 안내 (C드라이브, 기록과 같은 드라이브) */
+  warning: string | null;
+  /** 마지막 자동 백업이 실패했으면 그 안내 */
+  error: string | null;
 }
 
 export interface RoutineStat {

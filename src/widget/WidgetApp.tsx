@@ -48,6 +48,7 @@ export function WidgetApp() {
       mini={mini}
       onToggleMini={() => update("mini_mode", String(!mini))}
       shortcut={status?.shortcut ?? false}
+      updateReady={Boolean(pendingUpdate)}
       banner={
         <>
           {pendingUpdate && <UpdateBanner version={pendingUpdate} />}

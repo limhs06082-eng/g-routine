@@ -42,6 +42,10 @@ impl std::error::Error for AppError {}
 /// 파일 오류를 선생님이 이해할 수 있는 문장으로 (영어 원문은 로그에만)
 fn io_message(e: &std::io::Error) -> &'static str {
     use std::io::ErrorKind;
+    // Windows: 다른 프로그램(엑셀 등)이 그 파일을 열어 두고 있음 (ERROR_SHARING_VIOLATION · ERROR_LOCK_VIOLATION)
+    if matches!(e.raw_os_error(), Some(32) | Some(33)) {
+        return "그 파일이 다른 프로그램(엑셀 등)에서 열려 있어요. 닫고 다시 시도해 주세요";
+    }
     match e.kind() {
         ErrorKind::NotFound => "파일이나 폴더를 찾지 못했어요",
         ErrorKind::PermissionDenied => "그 폴더에 쓸 권한이 없어요. 다른 폴더를 골라 주세요",
@@ -93,6 +97,8 @@ impl Serialize for AppError {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         match self {
             AppError::Invalid(_) | AppError::NotReady => log::info!("안내: {self}"),
+            // 백업 파일 형식 오류의 원문에는 파일 내용이 섞일 수 있어 위치만 남긴다 (문제 보고 파일에 개인 내용이 들어가지 않게)
+            AppError::Json(e) => log::warn!("오류: {self} | 줄 {} 칸 {}", e.line(), e.column()),
             _ => log::warn!("오류: {self} | {self:?}"),
         }
         s.serialize_str(&self.to_string())
@@ -108,7 +114,9 @@ mod tests {
         let db = AppError::from(rusqlite::Error::InvalidQuery);
         let io = AppError::from(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "Access is denied. (os error 5)"));
         let json = AppError::from(serde_json::from_str::<u32>("x").unwrap_err());
-        for e in [db, io, json, AppError::Window("WebView2 error".into())] {
+        let busy = AppError::from(std::io::Error::from_raw_os_error(32));
+        assert!(busy.to_string().contains("엑셀"));
+        for e in [db, io, json, busy, AppError::Window("WebView2 error".into())] {
             let shown = serde_json::to_string(&e).unwrap();
             assert!(!shown.chars().any(|c| c.is_ascii_alphabetic()), "{shown}");
         }

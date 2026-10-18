@@ -114,13 +114,20 @@ fn migrate(conn: &Connection) -> AppResult<()> {
         tx.commit()?;
     }
     if version < 3 {
+        if version >= 1 {
+            keep_copy_before(conn, "pre-v3-g-routine.db");
+        }
         // 표를 다시 만드는 동안에는 외래 키 검사를 끈다 (트랜잭션 밖에서만 바꿀 수 있다)
         conn.pragma_update(None, "foreign_keys", "OFF")?;
         let result = (|| -> AppResult<()> {
+            let fk_broken = |c: &Connection| -> rusqlite::Result<i64> {
+                c.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| r.get(0))
+            };
+            // 예전부터 있던 어긋남 때문에 영영 열리지 않게 되지 않도록, 바꾸는 동안 새로 생긴 것만 본다
+            let before = fk_broken(conn)?;
             let tx = conn.unchecked_transaction()?;
             tx.execute_batch(SCHEMA_V3)?;
-            let broken: i64 = tx.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| r.get(0))?;
-            if broken > 0 {
+            if fk_broken(&tx)? > before {
                 return Err(AppError::invalid("데이터 구조를 바꾸지 못했어요"));
             }
             tx.pragma_update(None, "user_version", 3)?;
@@ -131,6 +138,21 @@ fn migrate(conn: &Connection) -> AppResult<()> {
         result?;
     }
     Ok(())
+}
+
+/// 구조를 바꾸기 전 DB를 backups 폴더에 한 번 복사해 둔다 (매일 백업 7개 순환에 섞이지 않는 이름).
+/// 실패해도 구조 바꾸기는 그대로 한다 (이 복사는 만일을 위한 것).
+fn keep_copy_before(conn: &Connection, name: &str) {
+    let Some(db) = conn.path().filter(|p| !p.is_empty()).map(Path::new) else { return };
+    let Some(dir) = db.parent().map(|d| d.join("backups")) else { return };
+    let target = dir.join(name);
+    if target.exists() || std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    match conn.execute("VACUUM INTO ?1", [target.to_string_lossy()]) {
+        Ok(_) => log::info!("구조를 바꾸기 전 DB를 {name}(으)로 보관했어요"),
+        Err(e) => log::warn!("구조를 바꾸기 전 DB를 보관하지 못했어요: {e}"),
+    }
 }
 
 pub fn integrity_ok(conn: &Connection) -> AppResult<bool> {
@@ -235,6 +257,50 @@ mod tests {
         )
         .unwrap();
         assert!(integrity_ok(&conn).unwrap());
+    }
+
+    fn v2_database(path: &Path) -> Connection {
+        let conn = Connection::open(path).unwrap();
+        conn.execute_batch(SCHEMA_V1).unwrap();
+        conn.execute_batch(SCHEMA_V2).unwrap();
+        conn.pragma_update(None, "user_version", 2).unwrap();
+        conn.execute(
+            "INSERT INTO routines (title, repeat_type, sort_order, created_at) VALUES ('출결 확인', 'daily', 0, '2026-10-01T09:00:00')",
+            [],
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn a_copy_is_kept_before_the_v3_change() {
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join(DB_FILE);
+        drop(v2_database(&db_path));
+        let conn = open(&db_path).unwrap();
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(version, 3);
+        let copy = Connection::open(dir.path().join("backups").join("pre-v3-g-routine.db")).unwrap();
+        let old: i64 = copy.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(old, 2, "바꾸기 전 모습 그대로");
+        let titles: String = copy.query_row("SELECT title FROM routines", [], |r| r.get(0)).unwrap();
+        assert_eq!(titles, "출결 확인");
+    }
+
+    #[test]
+    fn a_failed_v3_change_leaves_the_v2_database_as_it_was() {
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join(DB_FILE);
+        let conn = v2_database(&db_path);
+        // 이름이 겹치는 표를 미리 만들어 구조 바꾸기가 도중에 실패하게 한다
+        conn.execute_batch("CREATE TABLE routines_v3 (x INTEGER)").unwrap();
+        assert!(migrate(&conn).is_err());
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(version, 2);
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM routines", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1);
+        let fk: i64 = conn.query_row("PRAGMA foreign_keys", [], |r| r.get(0)).unwrap();
+        assert_eq!(fk, 1, "외래 키 검사가 다시 켜져 있어야 한다");
     }
 
     #[test]

@@ -217,17 +217,22 @@ fn schedule_position_save(app: &AppHandle, x: i32, bottom: i32) {
 /// 두 번째 백업(OneDrive · USB): 6시간마다 살펴 일주일이 지났으면 백업한다. 폴더를 정하지 않았으면 아무것도 하지 않는다.
 pub fn backup2_job() -> Job {
     Job::new("두 번째 백업", Duration::from_secs(180), Duration::from_secs(6 * 60 * 60), |app| {
+        use crate::storage::offsite;
         let state = app.state::<AppState>();
-        let result = state.with_conn(|c| {
+        // 백업 내용은 DB 잠금 안에서 만들고, 파일은 잠금 밖에서 쓴다 (느린 USB · 네트워크 드라이브에 위젯이 멈추지 않게)
+        let planned = state.with_conn(|c| {
             let today = service::today(c, now())?;
-            crate::storage::offsite::run_if_due(c, today, &crate::domain::day::fmt_ts(now()))
+            Ok(offsite::plan(c, today, &crate::domain::day::fmt_ts(now()))?.map(|p| (today, p)))
         });
+        let Ok(Some((today, (base, backup)))) = planned else { return };
+        let result = offsite::write(&base, today, &backup);
+        let _ = state.with_conn(|c| offsite::mark(c, today, &result));
         match result {
-            Ok(Some(_)) => log::info!("두 번째 백업을 만들었어요"),
-            Ok(None) => {}
-            // USB를 빼 둔 날 등. 다음에 다시 시도한다
+            Ok(_) => log::info!("두 번째 백업을 만들었어요"),
+            // USB를 빼 둔 날 등. 설정 탭에 알리고 6시간 뒤 다시 시도한다
             Err(e) => log::warn!("두 번째 백업을 만들지 못했어요: {e:?}"),
         }
+        let _ = app.emit(DATA_CHANGED, ());
     })
 }
 

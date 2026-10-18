@@ -4,6 +4,7 @@ import {
   isAllowedLink,
   moveItem,
   normalize,
+  periodLabel,
   repeatLabel,
   todayString,
   toggleBit,
@@ -56,4 +57,20 @@ test("normalize trims and clears fields that do not apply", () => {
   });
   expect(normalize({ ...base, repeatType: "once", onceDate: null }).onceDate).toBe(todayString());
   expect(emptyInput()).toEqual({ title: "", repeatType: "daily", weekdays: 0, onceDate: null, dueTime: null, link: null, slot: null, monthDay: null, activeFrom: null, activeUntil: null });
+});
+
+test("monthly and period labels", () => {
+  expect(repeatLabel({ repeatType: "monthly", weekdays: 0, onceDate: null, monthDay: 10 })).toBe("매월 10일");
+  expect(repeatLabel({ repeatType: "monthly", weekdays: 0, onceDate: null, monthDay: 0 })).toBe("매월 마지막 평일");
+  expect(periodLabel({ activeFrom: "2027-03-02", activeUntil: "2027-07-20" })).toBe("3/2~7/20");
+  expect(periodLabel({ activeFrom: null, activeUntil: "2026-12-31" })).toBe("~12/31");
+  expect(periodLabel({ activeFrom: null, activeUntil: null })).toBeNull();
+});
+
+test("normalize drops the month day and period where they do not apply", () => {
+  const daily = normalize({ ...base, monthDay: 5, activeFrom: "2027-03-02", activeUntil: "" });
+  expect([daily.monthDay, daily.activeFrom, daily.activeUntil]).toEqual([null, "2027-03-02", null]);
+  const once = normalize({ ...base, repeatType: "once", onceDate: "2026-10-20", activeFrom: "2027-03-02" });
+  expect(once.activeFrom).toBeNull();
+  expect(validateInput({ ...base, repeatType: "monthly", monthDay: null })).toBe("매월 며칠인지 골라 주세요");
 });

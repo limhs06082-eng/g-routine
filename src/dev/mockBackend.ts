@@ -42,7 +42,7 @@ const doneAt = new Map<number, string>([[2, `${TODAY}T08:55:00`]]);
 let settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, miniMode: false, vacationStart: null, vacationEnd: null, seenVersion: null, widgetScale: "normal", widgetOpacity: 100 };
 let ready = new URLSearchParams(window.location.search).get("setup") !== "1";
 const DATA_DIR = "D:\\G-routine\\data";
-let backup2 = { dir: null as string | null, last: null as string | null, suggested: "C:\\Users\\선생님\\OneDrive" as string | null, dismissed: false };
+let backup2 = { dir: null as string | null, last: null as string | null, suggested: "C:\\Users\\선생님\\OneDrive" as string | null, dismissed: false, warning: null as string | null, error: null as string | null };
 
 function bit(day: string) {
   const [y, m, d] = day.split("-").map(Number);
@@ -53,10 +53,16 @@ function bit(day: string) {
 function applies(r: Routine, day: string) {
   if (r.archivedAt) return false;
   if ((r.activeFrom && day < r.activeFrom) || (r.activeUntil && day > r.activeUntil)) return false;
-  if (r.repeatType === "monthly") {
-    const [y, m, d] = day.split("-").map(Number);
-    const last = new Date(y, m, 0).getDate();
-    return r.monthDay === 0 ? d === last : r.monthDay === d;
+  if (r.repeatType === "monthly" && r.monthDay !== null) {
+    // 앱과 같게: 그달에 없는 날은 마지막 날, 주말이면 바로 앞 평일 (미리보기라 공휴일은 빼고)
+    const target = (y: number, m: number) => {
+      const last = new Date(y, m, 0).getDate();
+      const dt = new Date(y, m - 1, r.monthDay === 0 || (r.monthDay ?? 0) > last ? last : (r.monthDay ?? 1));
+      while (dt.getDay() === 0 || dt.getDay() === 6) dt.setDate(dt.getDate() - 1);
+      return dayStr(dt);
+    };
+    const [y, m] = day.split("-").map(Number);
+    return target(y, m) === day || target(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1) === day;
   }
   if (r.repeatType === "daily") return true;
   if (r.repeatType === "weekdays") return (r.weekdays & bit(day)) !== 0;

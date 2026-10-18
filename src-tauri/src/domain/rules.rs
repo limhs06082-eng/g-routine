@@ -127,6 +127,19 @@ mod tests {
     }
 
     #[test]
+    fn monthly_edges_across_the_year_february_and_chuseok() {
+        // 2027-01-01(금, 신정) → 앞 평일은 2026-12-31(목): 해를 넘어 앞당긴다
+        assert_eq!(monthly_target(2027, 1, 1), Some(date("2026-12-31")));
+        assert!(applies(&monthly(1, 1), date("2026-12-31")));
+        // 평년 2월에는 29 · 30 · 31일이 없어 마지막 날(2/28 일요일) → 2/26(금)
+        for day in [29, 30, 31, 0] {
+            assert_eq!(monthly_target(2027, 2, day), Some(date("2027-02-26")), "{day}");
+        }
+        // 추석 연휴(2026-09-24 ~ 26) 안의 25일 → 9/23(수)
+        assert_eq!(monthly_target(2026, 9, 25), Some(date("2026-09-23")));
+    }
+
+    #[test]
     fn monthly_routines_show_only_on_their_day() {
         let r = monthly(1, 1);
         assert!(applies(&r, date("2027-04-30")), "5월 1일(토)의 일은 4월 30일(금)에");

@@ -31,6 +31,11 @@ pub fn get_status(state: State<'_, AppState>) -> AppStatus {
 
 #[tauri::command]
 pub async fn setup(app: AppHandle, state: State<'_, AppState>, dir: String, template: String) -> AppResult<()> {
+    let _turn = state.one_at_a_time();
+    // '시작하기'를 두 번 눌러도 템플릿 루틴이 두 번 들어가지 않게
+    if state.status().ready {
+        return Ok(());
+    }
     startup::setup(&state, Path::new(&dir), &template, now())?;
     // 새로 설치한 사람에게는 '바뀐 점' 안내를 띄우지 않는다
     let version = app.package_info().version.to_string();
@@ -42,6 +47,10 @@ pub async fn setup(app: AppHandle, state: State<'_, AppState>, dir: String, temp
 
 #[tauri::command]
 pub async fn restore_backup(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    let _turn = state.one_at_a_time();
+    if state.status().ready {
+        return Ok(());
+    }
     startup::restore(&state, now())?;
     shell::after_ready(&app);
     changed(&app);
@@ -52,6 +61,7 @@ pub async fn restore_backup(app: AppHandle, state: State<'_, AppState>) -> AppRe
 /// 잠긴 DB는 busy_timeout(3초)만큼 기다리므로 메인 스레드를 막지 않게 async로 둔다.
 #[tauri::command]
 pub async fn retry_boot(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    let _turn = state.one_at_a_time();
     if state.status().ready {
         return Ok(());
     }
@@ -195,6 +205,7 @@ pub async fn export_backup(state: State<'_, AppState>, path: String) -> AppResul
 
 #[tauri::command]
 pub async fn import_backup(app: AppHandle, state: State<'_, AppState>, path: String) -> AppResult<()> {
+    let _turn = state.one_at_a_time();
     let backup = export::read_file(Path::new(&path))?;
     state.with_conn(|c| {
         export::import(c, &backup)?;
@@ -207,6 +218,7 @@ pub async fn import_backup(app: AppHandle, state: State<'_, AppState>, path: Str
 
 #[tauri::command]
 pub async fn change_data_dir(app: AppHandle, state: State<'_, AppState>, dir: String) -> AppResult<()> {
+    let _turn = state.one_at_a_time();
     startup::change_dir(&state, Path::new(&dir), now())?;
     shell::after_ready(&app);
     changed(&app);
@@ -233,29 +245,54 @@ pub fn hide_widget(app: AppHandle) {
 /// 두 번째 백업(OneDrive · USB): 지금 상태와, 정하지 않았으면 권할 OneDrive 폴더
 #[tauri::command]
 pub async fn backup2_info(state: State<'_, AppState>) -> AppResult<offsite::Backup2Info> {
-    state.with_conn(|c| offsite::info(c, offsite::onedrive_dir()))
+    let data_dir = state.data_dir();
+    state.with_conn(|c| offsite::info(c, offsite::onedrive_dir(), data_dir.as_deref()))
 }
 
-/// 두 번째 백업 폴더를 정하거나(곧바로 한 번 백업한다) 끈다(None)
+/// 두 번째 백업을 한 번 쓴다. 내용은 DB 잠금 안에서 만들고, 파일은 잠금 밖에서 쓴다 (느린 USB에 위젯이 멈추지 않게).
+fn write_backup2(state: &AppState, base: &Path) -> AppResult<()> {
+    let (today, backup) = state.with_conn(|c| Ok((service::today(c, now())?, export::export(c, &fmt_ts(now()))?)))?;
+    let result = offsite::write(base, today, &backup);
+    state.with_conn(|c| offsite::mark(c, today, &result))?;
+    result.map(|_| ())
+}
+
+/// 두 번째 백업 폴더를 정하거나(곧바로 한 번 백업해 쓸 수 있는지 확인한다) 끈다(None)
 #[tauri::command]
-pub async fn set_backup2_dir(state: State<'_, AppState>, dir: Option<String>) -> AppResult<offsite::Backup2Info> {
-    let today = state.with_conn(|c| service::today(c, now()))?;
-    state
-        .with_conn(|c| {
-            offsite::set_dir(c, dir.as_deref().map(Path::new), today, &fmt_ts(now()))?;
-            offsite::info(c, offsite::onedrive_dir())
-        })
-        .inspect(|i| log::info!("두 번째 백업 폴더: {}", if i.dir.is_some() { "정함" } else { "끔" }))
+pub async fn set_backup2_dir(app: AppHandle, state: State<'_, AppState>, dir: Option<String>) -> AppResult<offsite::Backup2Info> {
+    match &dir {
+        Some(d) => {
+            write_backup2(&state, Path::new(d))?;
+            // 한 번 정했으면 위젯이 다시 권하지 않는다 (나중에 꺼도)
+            state.with_conn(|c| {
+                settings::set(c, settings::BACKUP2_DIR, d)?;
+                settings::set(c, settings::BACKUP2_DISMISSED, "true")
+            })?;
+        }
+        None => {
+            state.with_conn(|c| {
+                c.execute(
+                    "DELETE FROM settings WHERE key IN (?1, ?2, ?3)",
+                    rusqlite::params![settings::BACKUP2_DIR, settings::BACKUP2_LAST, settings::BACKUP2_ERROR],
+                )?;
+                Ok(())
+            })?;
+        }
+    }
+    log::info!("두 번째 백업 폴더: {}", if dir.is_some() { "정함" } else { "끔" });
+    changed(&app);
+    let data_dir = state.data_dir();
+    state.with_conn(|c| offsite::info(c, offsite::onedrive_dir(), data_dir.as_deref()))
 }
 
 #[tauri::command]
 pub async fn backup2_now(state: State<'_, AppState>) -> AppResult<offsite::Backup2Info> {
-    let today = state.with_conn(|c| service::today(c, now()))?;
-    state.with_conn(|c| {
-        let dir = settings::get(c, settings::BACKUP2_DIR)?.ok_or_else(|| AppError::invalid("백업할 폴더를 먼저 골라 주세요"))?;
-        offsite::write_backup(c, Path::new(&dir), today, &fmt_ts(now()))?;
-        offsite::info(c, offsite::onedrive_dir())
-    })
+    let dir = state
+        .with_conn(|c| settings::get(c, settings::BACKUP2_DIR))?
+        .ok_or_else(|| AppError::invalid("백업할 폴더를 먼저 골라 주세요"))?;
+    write_backup2(&state, Path::new(&dir))?;
+    let data_dir = state.data_dir();
+    state.with_conn(|c| offsite::info(c, offsite::onedrive_dir(), data_dir.as_deref()))
 }
 
 /// 위젯의 OneDrive 백업 권유 카드를 '나중에'로 닫는다 (설정 탭에서는 계속 보인다)

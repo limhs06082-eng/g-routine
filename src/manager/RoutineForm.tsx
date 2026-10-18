@@ -3,7 +3,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorMessage, type RepeatType, type Routine, type RoutineInput } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { emptyInput, normalize, REPEAT_NAMES, SLOT_NAMES, SLOTS, todayString, toggleBit, toInput, validateInput, WEEKDAY_NAMES } from "./routines";
+import {
+  emptyInput,
+  normalize,
+  periodLabel,
+  REPEAT_NAMES,
+  SLOT_NAMES,
+  SLOTS,
+  todayString,
+  toggleBit,
+  toInput,
+  validateInput,
+  WEEKDAY_NAMES,
+} from "./routines";
 
 interface Props {
   initial?: Routine;
@@ -18,6 +30,8 @@ export function RoutineForm({ initial, onSubmit, onCancel }: Props) {
   const [input, setInput] = useState<RoutineInput>(() => (initial ? toInput(initial) : emptyInput()));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [periodOpen, setPeriodOpen] = useState(() => Boolean(initial?.activeFrom || initial?.activeUntil));
+  const period = periodLabel(input);
 
   const set = (patch: Partial<RoutineInput>) => {
     setInput((i) => ({ ...i, ...patch }));
@@ -114,12 +128,14 @@ export function RoutineForm({ initial, onSubmit, onCancel }: Props) {
             ))}
             <option value={0}>마지막 평일</option>
           </select>
-          <span className="text-muted-foreground">주말 · 공휴일이면 바로 앞 평일에 보여요</span>
+          <span className="text-muted-foreground">주말 · 공휴일이면 바로 앞 평일에, 그달에 없는 날(31일 등)은 마지막 날에 보여요</span>
         </div>
       )}
       {input.repeatType !== "once" && (
-        <details className="text-xs" open={Boolean(input.activeFrom || input.activeUntil)}>
-          <summary className="cursor-pointer text-muted-foreground select-none">기간 정하기 (예: 1학기, 방과후 운영 기간)</summary>
+        <details className="text-xs" open={periodOpen} onToggle={(e) => setPeriodOpen(e.currentTarget.open)}>
+          <summary className="cursor-pointer text-muted-foreground select-none">
+            {period ? `기간: ${period}` : "기간 정하기 (예: 1학기, 방과후 운영 기간)"}
+          </summary>
           <div className="mt-1.5 flex items-center gap-2">
             <Input type="date" aria-label="기간 시작일" value={input.activeFrom ?? ""} onChange={(e) => set({ activeFrom: e.target.value || null })} />
             <span className="text-muted-foreground">~</span>

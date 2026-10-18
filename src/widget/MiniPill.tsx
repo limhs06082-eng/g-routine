@@ -4,12 +4,12 @@ import { cn } from "@/lib/utils";
 import { progress } from "./today";
 
 /** 미니 모드: 알약 모양으로 진행 상황만 보여 준다. 누르면 원래 크기로 돌아간다. */
-export function MiniPill({ view, onExpand }: { view: TodayView; onExpand: () => void }) {
+export function MiniPill({ view, onExpand, updateReady = false }: { view: TodayView; onExpand: () => void; updateReady?: boolean }) {
   const { done, total } = progress(view);
   const late = view.pending.filter((i) => i.overdue).length;
   const allDone = total > 0 && done === total;
   const text = total === 0 ? (view.rest ? "쉬는 날" : "할 일 없음") : allDone ? "모두 완료" : `${done}/${total}`;
-  const label = `크게 보기 · 오늘 할 일 ${total}개 중 ${done}개 완료${late > 0 ? ` · 마감 지난 일 ${late}개` : ""}`;
+  const label = `크게 보기 · 오늘 할 일 ${total}개 중 ${done}개 완료${late > 0 ? ` · 마감 지난 일 ${late}개` : ""}${updateReady ? " · 새 버전 준비됨" : ""}`;
 
   return (
     <div data-mini-pill className="flex items-center rounded-full border border-border bg-background py-0.5 pr-0.5 pl-1 shadow-[0_2px_10px_rgba(44,44,42,0.10)]">
@@ -26,6 +26,7 @@ export function MiniPill({ view, onExpand }: { view: TodayView; onExpand: () => 
         <Check className={cn("size-3.5", allDone ? "text-success" : "text-primary")} strokeWidth={3} />
         <span>{text}</span>
         {late > 0 && <span className="rounded-full bg-danger-soft px-1.5 text-[10px] leading-4 text-danger">{late}</span>}
+        {updateReady && <span title="새 버전 준비됨 — 크게 보면 설치할 수 있어요" className="size-1.5 rounded-full bg-primary" />}
       </button>
     </div>
   );

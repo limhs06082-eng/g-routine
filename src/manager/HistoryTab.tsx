@@ -138,7 +138,9 @@ function CalendarView() {
           )}
         </div>
         <div className="mt-3 flex items-center justify-end gap-1.5 text-[11px] text-muted-foreground">
-          <span className="size-3 rounded border border-dashed border-border" />
+          <span aria-hidden className="text-muted-foreground/60">
+            1
+          </span>
           기록 없음
           <span className="ml-2" />
           적음

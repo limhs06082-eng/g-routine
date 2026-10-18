@@ -12,7 +12,7 @@ const apiMock = vi.hoisted(() => ({
   importBackup: vi.fn(),
   setVacation: vi.fn(),
   saveDiagnostics: vi.fn(),
-  backup2Info: vi.fn(() => Promise.resolve({ dir: null as string | null, last: null as string | null, suggested: null as string | null, dismissed: false })),
+  backup2Info: vi.fn(() => Promise.resolve({ dir: null as string | null, last: null as string | null, suggested: null as string | null, dismissed: false, warning: null, error: null })),
   setBackup2Dir: vi.fn(),
   backup2Now: vi.fn(),
   holidayCoverage: vi.fn(() => Promise.resolve({ lastYear: 2027, state: "ok" })),
@@ -183,8 +183,8 @@ test("a failed autostart registration is explained", () => {
 
 test("settings offer OneDrive first for the second backup", async () => {
   const user = userEvent.setup();
-  apiMock.backup2Info.mockResolvedValueOnce({ dir: null, last: null, suggested: "C:/Users/t/OneDrive", dismissed: false });
-  apiMock.setBackup2Dir.mockResolvedValue({ dir: "C:/Users/t/OneDrive", last: "2026-10-12", suggested: null, dismissed: false });
+  apiMock.backup2Info.mockResolvedValueOnce({ dir: null, last: null, suggested: "C:/Users/t/OneDrive", dismissed: false, warning: null, error: null });
+  apiMock.setBackup2Dir.mockResolvedValue({ dir: "C:/Users/t/OneDrive", last: "2026-10-12", suggested: null, dismissed: false, warning: null, error: null });
   render(<SettingsTab settings={settings} status={status} onChange={vi.fn()} />);
   await user.click(await screen.findByRole("button", { name: "OneDrive에 백업하기" }));
   expect(apiMock.setBackup2Dir).toHaveBeenCalledWith("C:/Users/t/OneDrive");

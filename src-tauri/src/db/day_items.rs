@@ -60,6 +60,17 @@ pub fn effective_day(c: &Connection, day: NaiveDate) -> AppResult<NaiveDate> {
     }
 }
 
+/// PC 시계를 이틀 넘게 되돌려 이미 기록이 있는 지난 날로 간 경우인가.
+/// 그날 목록은 보여 주되 고치지는 않는다 (지난 기록은 바꾸지 않는다). 기록이 없는 날이면 평소처럼 맞춰 목록이 멈추지 않게 한다.
+fn is_recorded_past_day(c: &Connection, day: NaiveDate) -> AppResult<bool> {
+    let Some(last) = last_synced_day(c)? else { return Ok(false) };
+    if last.pred_opt().is_none_or(|y| day >= y) {
+        return Ok(false);
+    }
+    let rows: i64 = c.query_row("SELECT COUNT(*) FROM day_items WHERE day = ?1", [fmt_day(day)], |r| r.get(0))?;
+    Ok(rows > 0)
+}
+
 /// 그날 이미 있는 항목 (맞출 때 비교용)
 struct Existing {
     id: i64,
@@ -120,6 +131,9 @@ fn plan<'a>(existing: &HashMap<i64, Existing>, sched: &[&'a Routine]) -> Vec<Cha
 pub fn sync_day(c: &Connection, day: NaiveDate, rest: Option<RestKind>) -> AppResult<()> {
     if effective_day(c, day)? != day {
         return Ok(()); // 이미 넘어간 어제 기록은 건드리지 않는다
+    }
+    if is_recorded_past_day(c, day)? {
+        return Ok(());
     }
     let d = fmt_day(day);
     let all = routines::list_unarchived(c)?;

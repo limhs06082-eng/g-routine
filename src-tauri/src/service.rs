@@ -615,4 +615,37 @@ mod tests {
         };
         assert!(create_routine(&c, reversed, at(MON)).is_err());
     }
+
+    #[test]
+    fn rows_written_by_an_older_app_are_cleaned_up_or_kept() {
+        let c = open_in_memory().unwrap();
+        let monthly = RoutineInput { repeat_type: RepeatType::Monthly, month_day: Some(20), ..input_daily("월례 보고") };
+        let m = create_routine(&c, monthly, at("2026-10-01 09:00")).unwrap();
+        let d = create_routine(&c, input_daily("출결 확인"), at("2026-10-01 09:00")).unwrap();
+        // 예전 버전(복원 프로그램으로 돌아간 앱)은 '매월'을 '매일'로 보고 스냅샷 없이 넣는다
+        for (rid, done) in [(m, None), (d, Some("2026-10-12T08:40:00"))] {
+            c.execute(
+                "INSERT INTO day_items (day, routine_id, title_snapshot, sort_order, completed_at) VALUES ('2026-10-12', ?1, 'x', 0, ?2)",
+                rusqlite::params![rid, done],
+            )
+            .unwrap();
+        }
+        let v = get_today(&c, at(MON)).unwrap();
+        assert!(v.pending.is_empty(), "오늘(12일)은 20일이 아니므로 끝내지 않은 '매월' 항목은 지운다");
+        assert_eq!(v.done.len(), 1, "끝낸 항목은 그대로 둔다");
+        assert_eq!(v.done[0].repeat_type, RepeatType::Daily);
+    }
+
+    #[test]
+    fn setting_the_clock_back_to_a_recorded_day_does_not_rewrite_it() {
+        let c = open_in_memory().unwrap();
+        let a = create_routine(&c, input_daily("출결 확인"), at(MON)).unwrap();
+        get_today(&c, at(MON)).unwrap();
+        get_today(&c, at(FRI)).unwrap();
+        archive_routine(&c, a, at(FRI)).unwrap();
+        // PC 시계가 월요일로 돌아가도 월요일 기록(끝내지 않은 출결 확인)은 그대로
+        let v = get_today(&c, at(MON)).unwrap();
+        assert_eq!(titles(&v.pending), vec!["출결 확인"]);
+        assert_eq!(titles(&history_day(&c, "2026-10-12").unwrap()), vec!["출결 확인"]);
+    }
 }

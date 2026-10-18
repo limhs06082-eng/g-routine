@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Download, Flame } from "lucide-react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,8 @@ export function buildBars(from: string, to: string, days: DaySummary[]): Bar[] {
   for (const d of dayList) {
     const [y, m, dd] = d.split("-").map(Number);
     const monday = shift(d, -((new Date(y, m - 1, dd).getDay() + 6) % 7));
-    const bar = weeks.get(monday) ?? { key: monday, label: `${label(monday)}주`, total: 0, completed: 0 };
+    // 첫 주는 기간 시작일부터라 그날을 이름으로 쓴다
+    const bar = weeks.get(monday) ?? { key: monday, label: `${label(monday < from ? from : monday)}주`, total: 0, completed: 0 };
     bar.total += byDay.get(d)?.total ?? 0;
     bar.completed += byDay.get(d)?.completed ?? 0;
     weeks.set(monday, bar);
@@ -54,7 +55,15 @@ export function buildBars(from: string, to: string, days: DaySummary[]): Bar[] {
 export function StatsView() {
   const [days, setDays] = useState<number>(30);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const to = todayString();
+  // 하루 시작 시각 전이면 오늘은 아직 전날이다 (달력 날짜로 하면 내일이 빈 막대로 들어간다)
+  const [today, setToday] = useState(todayString());
+  useEffect(() => {
+    api
+      .today()
+      .then((v) => setToday(v.day))
+      .catch(() => {});
+  }, []);
+  const to = today;
   const from = shift(to, -(days - 1));
   const { data, error, reload } = useData(() => api.historyStats(from, to), [from, to]);
   const stats = data && data.from === from && data.to === to ? data : null;

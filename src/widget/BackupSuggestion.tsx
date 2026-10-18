@@ -27,7 +27,9 @@ export function BackupSuggestion({ dir, onDone }: { dir: string; onDone: () => v
         <Cloud className="size-3.5 text-primary" />
         OneDrive에 백업해 둘까요?
       </div>
-      <p className="leading-5 text-muted-foreground">PC가 고장 나도 기록을 되살릴 수 있게 일주일마다 OneDrive에 백업해요.</p>
+      <p className="leading-5 text-muted-foreground">
+        PC가 고장 나도 기록을 되살릴 수 있게 일주일마다 OneDrive에 백업해요. 나중에 설정에서도 켤 수 있어요.
+      </p>
       {error && (
         <p role="alert" className="mt-1 text-danger">
           {error}
@@ -35,7 +37,7 @@ export function BackupSuggestion({ dir, onDone }: { dir: string; onDone: () => v
       )}
       <div className="mt-1.5 flex justify-end gap-1.5">
         <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act(api.dismissBackup2)}>
-          나중에
+          괜찮아요
         </Button>
         <Button size="sm" disabled={busy} onClick={() => void act(() => api.setBackup2Dir(dir))}>
           백업하기

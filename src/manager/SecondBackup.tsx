@@ -41,7 +41,7 @@ export function SecondBackup({ run }: Props) {
       {info.dir ? (
         <>
           <div className="text-xs text-muted-foreground">
-            <span className="font-mono">{info.dir}\G-routine 백업</span> 폴더에 일주일마다 백업해요 · 마지막{" "}
+            <span className="font-mono break-all">{info.dir}\G-routine 백업</span> 폴더에 일주일마다 백업해요 · 마지막{" "}
             {info.last ?? "아직 없음"}
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -56,6 +56,12 @@ export function SecondBackup({ run }: Props) {
               끄기
             </Button>
           </div>
+          {info.error && (
+            <p role="alert" className="mt-1.5 text-xs text-danger">
+              {info.error}
+            </p>
+          )}
+          {info.warning && <p className="mt-1.5 text-xs text-chip-due-ink">{info.warning}</p>}
           <p className="mt-1.5 text-xs text-muted-foreground">되살릴 때는 아래 '불러오기'에서 그 폴더의 파일을 고르세요.</p>
         </>
       ) : (

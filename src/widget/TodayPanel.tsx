@@ -65,9 +65,11 @@ interface Props {
   banner?: ReactNode;
   /** 전역 단축키(Ctrl+Alt+G)를 쓸 수 있는지 (숨기기 버튼 안내에 쓴다) */
   shortcut?: boolean;
+  /** 새 버전이 준비됐는지 (미니 모드 알약에 점으로 알린다) */
+  updateReady?: boolean;
 }
 
-export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini, banner, shortcut = false }: Props) {
+export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini, banner, shortcut = false, updateReady = false }: Props) {
   const { data, error, reload, setData } = useData(api.today);
   const [leaving, setLeaving] = useState<number[]>([]);
   const [undoItem, setUndoItem] = useState<DayItem | null>(null);
@@ -101,7 +103,7 @@ export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini, banner, sh
     );
   }
   const view = data;
-  if (mini) return <MiniPill view={view} onExpand={() => void onToggleMini().catch(() => {})} />;
+  if (mini) return <MiniPill view={view} updateReady={updateReady} onExpand={() => void onToggleMini().catch(() => {})} />;
   const { done, total, percent } = progress(view);
   const allDone = total > 0 && done === total;
   const groups = groupBySlot(view.pending);

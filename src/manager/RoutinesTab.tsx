@@ -130,7 +130,7 @@ export function RoutinesTab() {
                         size="icon-sm"
                         aria-label={`${r.title} 위로`}
                         disabled={idx === 0}
-                        className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100"
+                        className="opacity-40 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100"
                         onClick={() => void move(idx, idx - 1)}
                       >
                         <ArrowUp className="size-3.5" />
@@ -140,7 +140,7 @@ export function RoutinesTab() {
                         size="icon-sm"
                         aria-label={`${r.title} 아래로`}
                         disabled={idx === routines.length - 1}
-                        className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100"
+                        className="opacity-40 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100"
                         onClick={() => void move(idx, idx + 1)}
                       >
                         <ArrowDown className="size-3.5" />
