@@ -39,23 +39,24 @@ pub fn run() {
             if let Ok(dir) = app.path().app_local_data_dir() {
                 logging::init(dir.join("logs"));
             }
-            log::info!("G-routine {} 시작", app.package_info().version);
             let location_file = app.path().app_config_dir()?.join("location.json");
             let exe_dir = std::env::current_exe()?.parent().map(|p| p.to_path_buf()).unwrap_or_default();
             let state = state::AppState::new(location_file, exe_dir.clone());
             startup::boot(&state, &exe_dir, &storage::location::drive_candidates(), now());
+            // 데이터 폴더(D드라이브)가 있으면 그쪽 로그로 옮긴 뒤 시작 상태를 남긴다 (복원 프로그램이 C드라이브를 지워도 남게)
+            if let Some(dir) = state.data_dir() {
+                logging::use_dir(dir.join("logs"));
+            }
             let status = state.status();
             log::info!(
-                "시작 상태: 준비={} 포터블={} 손상={} 열기실패={} 예전폴더못찾음={}",
+                "G-routine {} 시작: 준비={} 포터블={} 손상={} 열기실패={} 예전폴더못찾음={}",
+                app.package_info().version,
                 status.ready,
                 status.portable,
                 status.corrupt,
                 status.open_failed,
                 status.previous_dir.is_some()
             );
-            if let Some(dir) = state.data_dir() {
-                logging::use_dir(dir.join("logs"));
-            }
             app.manage(state);
             shell::startup(app.handle())?;
             shell::update::spawn_update_checker(app.handle().clone());
