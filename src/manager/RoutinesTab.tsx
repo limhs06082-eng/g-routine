@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { GripVertical, Link as LinkIcon, Pencil, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, GripVertical, Link as LinkIcon, Pencil, Trash2 } from "lucide-react";
 import { Chip } from "@/components/Chip";
 import { Button } from "@/components/ui/button";
 import { api, errorMessage } from "@/lib/api";
@@ -13,18 +13,27 @@ export function RoutinesTab() {
   const [editing, setEditing] = useState<number | null>(null);
   const [confirming, setConfirming] = useState<number | null>(null);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const routines = data ?? [];
 
   async function drop(to: number) {
+    setDragOver(null);
     if (dragFrom === null || dragFrom === to) {
       setDragFrom(null);
       return;
     }
-    setNotice(null);
-    const next = moveItem(routines, dragFrom, to);
-    setData(next);
+    const from = dragFrom;
     setDragFrom(null);
+    await move(from, to);
+  }
+
+  /** 끌어서 놓거나 위로 · 아래로 버튼으로 순서를 바꾼다 */
+  async function move(from: number, to: number) {
+    if (to < 0 || to >= routines.length || from === to) return;
+    setNotice(null);
+    const next = moveItem(routines, from, to);
+    setData(next);
     try {
       await api.reorderRoutines(next.map((r) => r.id));
     } catch (e) {
@@ -81,10 +90,21 @@ export function RoutinesTab() {
                   key={r.id}
                   draggable
                   onDragStart={() => setDragFrom(idx)}
-                  onDragOver={(e) => e.preventDefault()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (dragOver !== idx) setDragOver(idx);
+                  }}
                   onDrop={() => void drop(idx)}
-                  onDragEnd={() => setDragFrom(null)}
-                  className={cn("flex items-center gap-2 px-3 py-2.5 text-sm", dragFrom === idx && "opacity-50")}
+                  onDragEnd={() => {
+                    setDragFrom(null);
+                    setDragOver(null);
+                  }}
+                  className={cn(
+                    "group flex items-center gap-2 px-3 py-2.5 text-sm",
+                    dragFrom === idx && "opacity-50",
+                    // 놓을 자리: 위에서 끌어오면 아래쪽에, 아래에서 끌어오면 위쪽에 선을 긋는다
+                    dragFrom !== null && dragOver === idx && dragFrom !== idx && (dragFrom < idx ? "shadow-[inset_0_-2px_0_var(--color-soft-3)]" : "shadow-[inset_0_2px_0_var(--color-soft-3)]"),
+                  )}
                 >
                   <GripVertical className="size-4 shrink-0 cursor-grab text-muted-foreground" aria-hidden />
                   <span className="min-w-0 flex-1 truncate">{r.title}</span>
@@ -105,6 +125,26 @@ export function RoutinesTab() {
                     </span>
                   ) : (
                     <>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`${r.title} 위로`}
+                        disabled={idx === 0}
+                        className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100"
+                        onClick={() => void move(idx, idx - 1)}
+                      >
+                        <ArrowUp className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`${r.title} 아래로`}
+                        disabled={idx === routines.length - 1}
+                        className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100"
+                        onClick={() => void move(idx, idx + 1)}
+                      >
+                        <ArrowDown className="size-3.5" />
+                      </Button>
                       <Button variant="ghost" size="icon-sm" aria-label={`${r.title} 수정`} onClick={() => setEditing(r.id)}>
                         <Pencil className="size-3.5" />
                       </Button>

@@ -11,7 +11,8 @@ export function QuickAdd({ onAdd }: { onAdd: (title: string) => Promise<void> })
     setBusy(true);
     try {
       await onAdd(title);
-      setValue("");
+      // 기다리는 동안 다음 할 일을 적기 시작했으면 그대로 둔다
+      setValue((v) => (v.trim() === title ? "" : v));
     } catch {
       // 오류 문구는 부모가 보여준다
     } finally {

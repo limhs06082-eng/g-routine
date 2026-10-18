@@ -46,14 +46,37 @@ export function useData<T>(load: () => Promise<T>, deps: unknown[] = []) {
   return { data, error, reload, setData };
 }
 
+const THEME_KEY = "g-routine-theme";
+
+function rememberTheme(theme: string) {
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    // 저장소를 못 써도 다음 실행에 잠깐 기본 색이 보일 뿐이다
+  }
+}
+
+/** 지난번 테마를 시작하자마자 칠한다 (설정을 불러오는 동안 라벤더가 잠깐 보이지 않게) */
+export function applyRememberedTheme() {
+  try {
+    const theme = localStorage.getItem(THEME_KEY);
+    document.documentElement.dataset.theme = theme ?? "lavender";
+  } catch {
+    document.documentElement.dataset.theme = "lavender";
+  }
+}
+
 export function useSettings(enabled: boolean) {
   const { data, setData } = useData<Settings | null>(
     () => (enabled ? api.settings() : Promise.resolve(null)),
     [enabled],
   );
-  const theme = data?.theme ?? "lavender";
+  const theme = data?.theme ?? null;
   useEffect(() => {
+    // 설정을 불러오기 전에는 바꾸지 않는다 (main.tsx가 기억해 둔 테마를 먼저 칠해 둔다)
+    if (!theme) return;
     document.documentElement.dataset.theme = theme;
+    rememberTheme(theme);
   }, [theme]);
   const update = useCallback(
     async (key: SettingKey, value: string) => {

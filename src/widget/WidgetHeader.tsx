@@ -4,7 +4,8 @@ import { api } from "@/lib/api";
 
 interface Props {
   dayLabel: string;
-  pinned: boolean;
+  /** 설정을 불러오기 전에는 null (아이콘이 깜빡이지 않게 흐리게 둔다) */
+  pinned: boolean | null;
   onTogglePin: () => void;
   onShrink: () => void;
   /** 전역 단축키를 쓸 수 있으면 숨기기 버튼에 안내한다 */
@@ -23,8 +24,21 @@ export function WidgetHeader({ dayLabel, pinned, onTogglePin, onShrink, shortcut
         </div>
       </div>
       <div className="flex items-center gap-0.5">
-        <Button variant="ghost" size="icon-sm" aria-label={pinned ? "맨 위 고정 해제" : "맨 위에 고정"} onClick={onTogglePin}>
-          {pinned ? <Pin className="size-3.5 text-primary" /> : <PinOff className="size-3.5 text-muted-foreground" />}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={pinned ? "맨 위 고정 해제" : "맨 위에 고정"}
+          aria-pressed={pinned ?? undefined}
+          disabled={pinned === null}
+          onClick={onTogglePin}
+        >
+          {pinned === null ? (
+            <Pin className="size-3.5 text-muted-foreground/40" />
+          ) : pinned ? (
+            <Pin className="size-3.5 text-primary" />
+          ) : (
+            <PinOff className="size-3.5 text-muted-foreground" />
+          )}
         </Button>
         <Button variant="ghost" size="icon-sm" aria-label="작게 보기" title="작게 보기" onClick={onShrink}>
           <Minimize2 className="size-3.5 text-muted-foreground" />

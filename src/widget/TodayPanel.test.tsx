@@ -209,3 +209,27 @@ test("pending items are shown under time slot headings", async () => {
   expect(screen.getByRole("region", { name: "언제든" })).toHaveTextContent("메모");
   expect(screen.queryByRole("region", { name: "수업 중" })).not.toBeInTheDocument();
 });
+
+test("progress and the done list are announced to screen readers", async () => {
+  const user = userEvent.setup();
+  apiMock.today.mockResolvedValue({ ...view, pending: [item(1, "출결 확인")], done: [item(2, "수업 준비", { completedAt: "2026-10-05T08:00:00" })] });
+  renderPanel();
+  expect(await screen.findByRole("progressbar", { name: "오늘 진행률" })).toHaveAttribute("aria-valuenow", "50");
+  const toggle = screen.getByRole("button", { name: /완료 1개/ });
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await user.click(toggle);
+  expect(toggle).toHaveAttribute("aria-expanded", "true");
+});
+
+test("typing the next task while one is being added keeps the new text", async () => {
+  const user = userEvent.setup();
+  let finish: () => void = () => {};
+  apiMock.quickAdd.mockImplementation(() => new Promise<void>((r) => (finish = r)));
+  renderPanel();
+  const input = await screen.findByLabelText("오늘 할 일 추가");
+  await user.type(input, "가정통신문{Enter}");
+  await user.type(input, " 회수");
+  finish();
+  await waitFor(() => expect(apiMock.quickAdd).toHaveBeenCalledWith("가정통신문"));
+  await waitFor(() => expect(input).toHaveValue("가정통신문 회수"));
+});

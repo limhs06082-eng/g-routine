@@ -56,7 +56,7 @@ function EmptyState({ view, total }: { view: TodayView; total: number }) {
 }
 
 interface Props {
-  pinned: boolean;
+  pinned: boolean | null;
   onTogglePin: () => Promise<unknown>;
   /** 미니 모드(알약 모양)로 보여 줄지 */
   mini: boolean;
@@ -71,10 +71,12 @@ export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini, banner, sh
   const { data, error, reload, setData } = useData(api.today);
   const [leaving, setLeaving] = useState<number[]>([]);
   const [undoItem, setUndoItem] = useState<DayItem | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // 같은 문구가 다시 와도 새 알림으로 보이고 시간이 다시 흐르도록 번호를 함께 둔다
+  const [notice, setNoticeState] = useState<{ text: string; n: number } | null>(null);
+  const setNotice = useCallback((text: string | null) => setNoticeState(text === null ? null : { text, n: Date.now() }), []);
   const [showDone, setShowDone] = useState(false);
   const closeUndo = useCallback(() => setUndoItem(null), []);
-  const closeNotice = useCallback(() => setNotice(null), []);
+  const closeNotice = useCallback(() => setNotice(null), [setNotice]);
 
   if (!data) {
     if (!error) return <div className={mini ? "h-8" : "h-28"} />;
@@ -173,7 +175,14 @@ export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini, banner, sh
             {allDone ? "모두 완료" : `${done} / ${total}`}
           </span>
         </div>
-        <div className="h-1.5 rounded-full bg-soft">
+        <div
+          role="progressbar"
+          aria-label="오늘 진행률"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+          className="h-1.5 rounded-full bg-soft"
+        >
           <div
             className={cn("h-1.5 rounded-full transition-all duration-300", allDone ? "bg-success" : "bg-soft-3")}
             style={{ width: `${percent}%` }}
@@ -209,11 +218,13 @@ export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini, banner, sh
           onClose={closeUndo}
         />
       )}
-      {notice && <Notice message={notice} onClose={closeNotice} />}
+      {notice && <Notice key={notice.n} message={notice.text} onClose={closeNotice} />}
       {view.done.length > 0 && (
         <div className="mt-2 border-t border-border">
           <button
             type="button"
+            aria-expanded={showDone}
+            aria-controls="done-list"
             onClick={() => setShowDone((s) => !s)}
             className="flex w-full items-center gap-1 px-3.5 py-2 text-xs text-muted-foreground hover:text-foreground"
           >
@@ -221,7 +232,7 @@ export function TodayPanel({ pinned, onTogglePin, mini, onToggleMini, banner, sh
             완료 {view.done.length}개 {showDone ? "숨기기" : "보기"}
           </button>
           {showDone && (
-            <ul className="px-1 pb-1">
+            <ul id="done-list" className="px-1 pb-1">
               {view.done.map((item) => (
                 <DoneRow key={item.id} item={item} onUncheck={() => void uncheck(item)} />
               ))}

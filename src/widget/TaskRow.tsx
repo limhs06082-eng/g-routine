@@ -14,8 +14,8 @@ export function TaskRow({ item, leaving, onCheck, onOpenLink }: Props) {
   return (
     <li
       className={cn(
-        "flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-all duration-200 hover:bg-soft/60",
-        leaving && "-translate-x-2 opacity-0",
+        "flex max-h-16 items-center gap-2.5 overflow-hidden rounded-lg px-2.5 py-2 transition-all duration-200 hover:bg-soft/60",
+        leaving && "max-h-0 -translate-x-2 py-0 opacity-0",
       )}
     >
       <button

@@ -56,3 +56,15 @@ test("shows the empty state only for a loaded empty list", async () => {
   render(<RoutinesTab />);
   expect(await screen.findByText(/아직 루틴이 없어요/)).toBeInTheDocument();
 });
+
+test("routines can be moved with the keyboard-friendly up and down buttons", async () => {
+  const user = userEvent.setup();
+  apiMock.listRoutines.mockResolvedValue([routine(1, "출결 확인"), routine(2, "수업 준비"), routine(3, "공문 확인")]);
+  apiMock.reorderRoutines.mockResolvedValue(undefined);
+  render(<RoutinesTab />);
+  expect(await screen.findByRole("button", { name: "출결 확인 위로" })).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "공문 확인 위로" }));
+  expect(apiMock.reorderRoutines).toHaveBeenCalledWith([1, 3, 2]);
+  await user.click(screen.getByRole("button", { name: "출결 확인 아래로" }));
+  expect(apiMock.reorderRoutines).toHaveBeenLastCalledWith([3, 1, 2]);
+});

@@ -20,7 +20,7 @@ export function WidgetApp() {
   const opacity = (settings?.widgetOpacity ?? 100) / 100;
   const { ref, capped } = useAutoResize<HTMLDivElement>(scale === 1 ? null : Math.round(WIDGET_WIDTH * scale));
   const look = scale !== 1 || opacity !== 1 ? { zoom: scale, opacity } : undefined;
-  const pinned = settings?.alwaysOnTop ?? false;
+  const pinned = settings ? settings.alwaysOnTop : null;
   const mini = ready && (settings?.miniMode ?? false);
   const [version, setVersion] = useState<string | null>(null);
   useEffect(() => {
