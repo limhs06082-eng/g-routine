@@ -1,10 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type RepeatType = "daily" | "weekdays" | "once";
+export type RepeatType = "daily" | "weekdays" | "once" | "monthly";
 /** 하루 중 언제 하는 일인지: 조회 전 · 수업 중 · 방과 후 (없으면 언제든) */
 export type Slot = "morning" | "class" | "after";
 export type ThemeName = "lavender" | "mint" | "peach" | "sky" | "lemon";
-export type SettingKey = "always_on_top" | "autostart" | "hide_weekends" | "day_start_hour" | "theme" | "due_alerts" | "hide_holidays" | "mini_mode" | "seen_version";
+export type SettingKey = "always_on_top" | "autostart" | "hide_weekends" | "day_start_hour" | "theme" | "due_alerts" | "hide_holidays" | "mini_mode" | "seen_version" | "widget_scale" | "widget_opacity";
 export type TemplateName = "homeroom" | "subject" | "empty";
 
 export interface Routine {
@@ -16,6 +16,11 @@ export interface Routine {
   dueTime: string | null;
   link: string | null;
   slot: Slot | null;
+  /** 매월 반복의 날짜 (1–31, 0은 마지막 평일) */
+  monthDay: number | null;
+  /** 기간 한정 (YYYY-MM-DD, 둘 다 포함) */
+  activeFrom: string | null;
+  activeUntil: string | null;
   sortOrder: number;
   createdAt: string;
   archivedAt: string | null;
@@ -29,6 +34,9 @@ export interface RoutineInput {
   dueTime: string | null;
   link: string | null;
   slot: Slot | null;
+  monthDay: number | null;
+  activeFrom: string | null;
+  activeUntil: string | null;
 }
 
 export interface DayItem {
@@ -81,6 +89,10 @@ export interface Settings {
   vacationEnd: string | null;
   /** '바뀐 점' 안내를 마지막으로 본 버전 (없으면 v0.2.0 이하에서 올라온 것) */
   seenVersion: string | null;
+  /** 위젯 글자 크기 */
+  widgetScale: "normal" | "large";
+  /** 위젯 불투명도(%): 100 · 90 · 80 */
+  widgetOpacity: number;
 }
 
 /** 공휴일 표가 어느 해까지 있는지. endingSoon: 11월부터 내년 표가 아직 없음, missing: 올해 표가 없음 */
@@ -99,6 +111,27 @@ export interface Backup2Info {
   suggested: string | null;
   /** 위젯의 권유 카드를 '나중에'로 닫았는지 */
   dismissed: boolean;
+}
+
+export interface RoutineStat {
+  routineId: number;
+  title: string;
+  total: number;
+  completed: number;
+}
+
+/** 기간 통계 */
+export interface Stats {
+  from: string;
+  to: string;
+  /** 기록이 있는 날만, 날짜순 */
+  days: DaySummary[];
+  total: number;
+  completed: number;
+  /** 달성률이 낮은 루틴부터 */
+  routines: RoutineStat[];
+  /** 오늘까지 모두 마친 날이 이어진 수 */
+  streak: number;
 }
 
 export interface AppStatus {
@@ -140,6 +173,9 @@ export const api = {
   reorderRoutines: (ids: number[]) => invoke<void>("reorder_routines", { ids }),
   historyMonth: (year: number, month: number) => invoke<DaySummary[]>("history_month", { year, month }),
   historyDay: (day: string) => invoke<DayItem[]>("history_day", { day }),
+  historyStats: (from: string, to: string) => invoke<Stats>("history_stats", { from, to }),
+  /** 기간의 기록을 CSV(엑셀)로 저장한다 */
+  exportCsv: (path: string, from: string, to: string) => invoke<void>("export_csv", { path, from, to }),
   settings: () => invoke<Settings>("get_settings"),
   setSetting: (key: SettingKey, value: string) => invoke<Settings>("set_setting", { key, value }),
   /** 방학 기간을 정하거나(시작일·끝나는 날) 둘 다 null로 해제한다 */

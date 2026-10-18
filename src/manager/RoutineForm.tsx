@@ -11,7 +11,8 @@ interface Props {
   onCancel?: () => void;
 }
 
-const REPEATS: RepeatType[] = ["daily", "weekdays", "once"];
+const REPEATS: RepeatType[] = ["daily", "weekdays", "monthly", "once"];
+const MONTH_DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
 
 export function RoutineForm({ initial, onSubmit, onCancel }: Props) {
   const [input, setInput] = useState<RoutineInput>(() => (initial ? toInput(initial) : emptyInput()));
@@ -64,7 +65,13 @@ export function RoutineForm({ initial, onSubmit, onCancel }: Props) {
             type="button"
             role="radio"
             aria-checked={input.repeatType === t}
-            onClick={() => set({ repeatType: t, onceDate: t === "once" ? (input.onceDate ?? todayString()) : input.onceDate })}
+            onClick={() =>
+              set({
+                repeatType: t,
+                onceDate: t === "once" ? (input.onceDate ?? todayString()) : input.onceDate,
+                monthDay: t === "monthly" ? (input.monthDay ?? Number(todayString().slice(8))) : input.monthDay,
+              })
+            }
             className={cn("flex-1 py-1.5", input.repeatType === t ? "bg-soft font-medium text-ink" : "text-muted-foreground hover:bg-muted")}
           >
             {REPEAT_NAMES[t]}
@@ -91,6 +98,34 @@ export function RoutineForm({ initial, onSubmit, onCancel }: Props) {
             );
           })}
         </div>
+      )}
+      {input.repeatType === "monthly" && (
+        <div className="flex items-center gap-2 text-xs">
+          <select
+            aria-label="매월 날짜"
+            value={input.monthDay ?? ""}
+            onChange={(e) => set({ monthDay: Number(e.target.value) })}
+            className="h-8 rounded-lg border border-input bg-background px-2 text-sm"
+          >
+            {MONTH_DAYS.map((d) => (
+              <option key={d} value={d}>
+                {d}일
+              </option>
+            ))}
+            <option value={0}>마지막 평일</option>
+          </select>
+          <span className="text-muted-foreground">주말 · 공휴일이면 바로 앞 평일에 보여요</span>
+        </div>
+      )}
+      {input.repeatType !== "once" && (
+        <details className="text-xs" open={Boolean(input.activeFrom || input.activeUntil)}>
+          <summary className="cursor-pointer text-muted-foreground select-none">기간 정하기 (예: 1학기, 방과후 운영 기간)</summary>
+          <div className="mt-1.5 flex items-center gap-2">
+            <Input type="date" aria-label="기간 시작일" value={input.activeFrom ?? ""} onChange={(e) => set({ activeFrom: e.target.value || null })} />
+            <span className="text-muted-foreground">~</span>
+            <Input type="date" aria-label="기간 끝나는 날" value={input.activeUntil ?? ""} onChange={(e) => set({ activeUntil: e.target.value || null })} />
+          </div>
+        </details>
       )}
       {input.repeatType === "once" && (
         <Input type="date" aria-label="날짜" value={input.onceDate ?? ""} onChange={(e) => set({ onceDate: e.target.value || null })} />

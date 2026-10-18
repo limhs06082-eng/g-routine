@@ -12,9 +12,26 @@ pub const THEMES: [&str; 5] = ["lavender", "mint", "peach", "sky", "lemon"];
 pub const BOOL_KEYS: [&str; 6] = ["always_on_top", "autostart", "hide_weekends", "due_alerts", "hide_holidays", "mini_mode"];
 pub const DAY_START_HOUR: &str = "day_start_hour";
 pub const THEME: &str = "theme";
+/// 위젯 글자 크기: normal(보통) · large(크게)
+pub const WIDGET_SCALE: &str = "widget_scale";
+pub const WIDGET_SCALES: [&str; 2] = ["normal", "large"];
+/// 위젯 불투명도(%)
+pub const WIDGET_OPACITY: &str = "widget_opacity";
+pub const WIDGET_OPACITIES: [u32; 3] = [100, 90, 80];
 /// 화면이 set_setting으로 바꿀 수 있는 키. src/lib/api.ts의 SettingKey와 같아야 한다 (테스트로 확인).
-pub const USER_KEYS: [&str; 9] =
-    [BOOL_KEYS[0], BOOL_KEYS[1], BOOL_KEYS[2], BOOL_KEYS[3], BOOL_KEYS[4], BOOL_KEYS[5], DAY_START_HOUR, THEME, SEEN_VERSION];
+pub const USER_KEYS: [&str; 11] = [
+    BOOL_KEYS[0],
+    BOOL_KEYS[1],
+    BOOL_KEYS[2],
+    BOOL_KEYS[3],
+    BOOL_KEYS[4],
+    BOOL_KEYS[5],
+    DAY_START_HOUR,
+    THEME,
+    SEEN_VERSION,
+    WIDGET_SCALE,
+    WIDGET_OPACITY,
+];
 /// 방학 기간 (set_vacation으로 둘을 함께 바꾼다)
 pub const VACATION_START: &str = "vacation_start";
 pub const VACATION_END: &str = "vacation_end";
@@ -65,6 +82,11 @@ pub fn load(c: &Connection) -> AppResult<Settings> {
         vacation_end: get(c, VACATION_END)?.filter(|d| parse_day(d).is_some()),
         day_start_hour: get(c, DAY_START_HOUR)?.and_then(|v| v.parse::<u32>().ok()).filter(|h| *h < 24).unwrap_or(4),
         seen_version: get(c, SEEN_VERSION)?.filter(|v| is_version(v)),
+        widget_scale: get(c, WIDGET_SCALE)?.filter(|v| WIDGET_SCALES.contains(&v.as_str())).unwrap_or_else(|| "normal".into()),
+        widget_opacity: get(c, WIDGET_OPACITY)?
+            .and_then(|v| v.parse::<u32>().ok())
+            .filter(|v| WIDGET_OPACITIES.contains(v))
+            .unwrap_or(100),
         theme: get(c, THEME)?.filter(|t| THEMES.contains(&t.as_str())).unwrap_or_else(|| "lavender".into()),
     })
 }
@@ -99,6 +121,10 @@ pub fn apply(c: &Connection, key: &str, value: &str) -> AppResult<()> {
         value.parse::<u32>().map(|h| h < 24).unwrap_or(false)
     } else if key == THEME {
         THEMES.contains(&value)
+    } else if key == WIDGET_SCALE {
+        WIDGET_SCALES.contains(&value)
+    } else if key == WIDGET_OPACITY {
+        value.parse::<u32>().is_ok_and(|v| WIDGET_OPACITIES.contains(&v))
     } else {
         return Err(AppError::invalid("알 수 없는 설정이에요"));
     };
@@ -190,6 +216,8 @@ mod tests {
                 vacation_start: None,
                 vacation_end: None,
                 seen_version: None,
+                widget_scale: "normal".into(),
+                widget_opacity: 100,
             }
         );
     }
@@ -232,6 +260,8 @@ mod tests {
                 DAY_START_HOUR => "5",
                 THEME => "mint",
                 SEEN_VERSION => "1.0.0",
+                WIDGET_SCALE => "large",
+                WIDGET_OPACITY => "90",
                 _ => "true",
             };
             apply(&c, key, value).unwrap_or_else(|e| panic!("{key}: {e}"));

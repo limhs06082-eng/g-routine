@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RoutineForm } from "./RoutineForm";
 
@@ -39,6 +39,9 @@ test("submits normalized input and resets", async () => {
     dueTime: null,
     link: "https://a.b",
     slot: null,
+    monthDay: null,
+    activeFrom: null,
+    activeUntil: null,
   });
   expect(screen.getByLabelText("루틴 이름")).toHaveValue("");
 });
@@ -55,6 +58,9 @@ test("edit mode shows existing values and a save button", () => {
         dueTime: "09:00",
         link: null,
         slot: null,
+        monthDay: null,
+        activeFrom: null,
+        activeUntil: null,
         sortOrder: 0,
         createdAt: "",
         archivedAt: null,
@@ -88,4 +94,31 @@ test("weekend days and a time slot can be chosen", async () => {
   await user.click(screen.getByRole("radio", { name: "방과 후" }));
   await user.click(screen.getByRole("button", { name: "추가" }));
   expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ repeatType: "weekdays", weekdays: 32, slot: "after" }));
+});
+
+test("a monthly routine on the last weekday with a period can be added", async () => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined);
+  const user = userEvent.setup();
+  render(<RoutineForm onSubmit={onSubmit} />);
+  await user.type(screen.getByLabelText("루틴 이름"), "월말 출결 마감");
+  await user.click(screen.getByRole("radio", { name: "매월" }));
+  await user.selectOptions(screen.getByLabelText("매월 날짜"), "마지막 평일");
+  fireEvent.change(screen.getByLabelText("기간 시작일"), { target: { value: "2027-03-02" } });
+  fireEvent.change(screen.getByLabelText("기간 끝나는 날"), { target: { value: "2027-07-20" } });
+  await user.click(screen.getByRole("button", { name: "추가" }));
+  expect(onSubmit).toHaveBeenCalledWith(
+    expect.objectContaining({ repeatType: "monthly", monthDay: 0, activeFrom: "2027-03-02", activeUntil: "2027-07-20" }),
+  );
+});
+
+test("a period that ends before it starts is rejected", async () => {
+  const onSubmit = vi.fn();
+  const user = userEvent.setup();
+  render(<RoutineForm onSubmit={onSubmit} />);
+  await user.type(screen.getByLabelText("루틴 이름"), "방과후");
+  fireEvent.change(screen.getByLabelText("기간 시작일"), { target: { value: "2027-07-20" } });
+  fireEvent.change(screen.getByLabelText("기간 끝나는 날"), { target: { value: "2027-03-02" } });
+  await user.click(screen.getByRole("button", { name: "추가" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("기간의 시작일이 끝나는 날보다 늦어요");
+  expect(onSubmit).not.toHaveBeenCalled();
 });

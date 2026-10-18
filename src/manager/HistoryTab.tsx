@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { formatTime } from "@/widget/today";
 import { buildMonthGrid, formatDayTitle, levelOf, shiftMonth, type Level } from "./calendar";
 import { todayString } from "./routines";
+import { StatsView } from "./StatsView";
 
 const LEVEL_CLASS: Record<Level, string> = {
   [-1]: "text-muted-foreground/60",
@@ -28,9 +29,53 @@ function LoadError({ text, onRetry }: { text: string; onRetry: () => void }) {
 }
 
 export function HistoryTab() {
+  const [view, setView] = useState<"calendar" | "stats">("calendar");
+  return (
+    <div className="flex flex-col gap-4">
+      <div role="radiogroup" aria-label="보기" className="flex w-fit overflow-hidden rounded-lg border border-input text-xs">
+        {(
+          [
+            ["calendar", "달력"],
+            ["stats", "통계"],
+          ] as const
+        ).map(([v, label]) => (
+          <button
+            key={v}
+            type="button"
+            role="radio"
+            aria-checked={view === v}
+            onClick={() => setView(v)}
+            className={cn("px-4 py-1.5", view === v ? "bg-soft font-medium text-ink" : "text-muted-foreground hover:bg-muted")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {view === "calendar" ? <CalendarView /> : <StatsView />}
+    </div>
+  );
+}
+
+function CalendarView() {
   const now = new Date();
   const [ym, setYm] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
   const [selected, setSelected] = useState(todayString());
+  // 처음에는 '오늘 업무일'을 고른다 (하루 시작 시각 전이면 달력 날짜가 아니라 전날). 그새 다른 날을 골랐으면 두고.
+  const picked = useRef(false);
+  useEffect(() => {
+    api
+      .today()
+      .then((v) => {
+        if (picked.current) return;
+        setSelected(v.day);
+        setYm({ year: Number(v.day.slice(0, 4)), month: Number(v.day.slice(5, 7)) });
+      })
+      .catch(() => {});
+  }, []);
+  const pick = (day: string) => {
+    picked.current = true;
+    setSelected(day);
+  };
   // 달/날짜가 바뀐 직후 이전 응답이 남아 있어도 다른 날 기록으로 보이지 않도록 키를 함께 보관한다.
   const month = useData(
     async () => ({ ...ym, summary: await api.historyMonth(ym.year, ym.month) }),
@@ -78,7 +123,7 @@ export function HistoryTab() {
                 type="button"
                 aria-label={formatDayTitle(day)}
                 aria-pressed={selected === day}
-                onClick={() => setSelected(day)}
+                onClick={() => pick(day)}
                 className={cn(
                   "aspect-square rounded-lg py-1 transition-colors hover:ring-1 hover:ring-soft-3",
                   LEVEL_CLASS[levelOf(byDay.get(day))],
@@ -93,6 +138,9 @@ export function HistoryTab() {
           )}
         </div>
         <div className="mt-3 flex items-center justify-end gap-1.5 text-[11px] text-muted-foreground">
+          <span className="size-3 rounded border border-dashed border-border" />
+          기록 없음
+          <span className="ml-2" />
           적음
           <span className="size-3 rounded bg-muted" />
           <span className="size-3 rounded bg-soft" />

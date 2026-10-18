@@ -39,6 +39,35 @@ function Row({ label, hint, warn, children }: { label: string; hint?: string; wa
   );
 }
 
+function Segmented({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: [string, string][];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex shrink-0 overflow-hidden rounded-lg border border-input text-xs">
+      {options.map(([v, text]) => (
+        <button
+          key={v}
+          type="button"
+          role="radio"
+          aria-checked={value === v}
+          onClick={() => onChange(v)}
+          className={cn("px-3 py-1.5", value === v ? "bg-soft font-medium text-ink" : "text-muted-foreground hover:bg-muted")}
+        >
+          {text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 interface Props {
   settings: Settings;
   status: AppStatus;
@@ -124,6 +153,29 @@ export function SettingsTab({ settings, status, onChange }: Props) {
       </Row>
       <Row label="작게 보기" hint="위젯을 알약 모양(✓ 3/7)으로 줄여요. 알약을 누르면 다시 커져요">
         <Switch aria-label="작게 보기" checked={settings.miniMode} onCheckedChange={toggle("mini_mode")} />
+      </Row>
+      <Row label="글자 크기" hint="크게 하면 위젯도 조금 넓어져요">
+        <Segmented
+          label="글자 크기"
+          value={settings.widgetScale}
+          options={[
+            ["normal", "보통"],
+            ["large", "크게"],
+          ]}
+          onChange={(v) => void run(() => onChange("widget_scale", v))}
+        />
+      </Row>
+      <Row label="불투명도" hint="낮추면 위젯 뒤가 비쳐 보여요">
+        <Segmented
+          label="불투명도"
+          value={String(settings.widgetOpacity)}
+          options={[
+            ["100", "100%"],
+            ["90", "90%"],
+            ["80", "80%"],
+          ]}
+          onChange={(v) => void run(() => onChange("widget_opacity", v))}
+        />
       </Row>
       <Row
         label="위젯 숨기기 단축키"

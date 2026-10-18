@@ -26,7 +26,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 import { holidayHint, SettingsTab } from "./SettingsTab";
 import { vacationLabel } from "./VacationSetting";
 
-const settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, miniMode: false, vacationStart: null, vacationEnd: null, seenVersion: null };
+const settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, miniMode: false, vacationStart: null, vacationEnd: null, seenVersion: null, widgetScale: "normal", widgetOpacity: 100 };
 const status: AppStatus = {
   ready: true,
   corrupt: false,
@@ -190,4 +190,14 @@ test("settings offer OneDrive first for the second backup", async () => {
   expect(apiMock.setBackup2Dir).toHaveBeenCalledWith("C:/Users/t/OneDrive");
   expect(await screen.findByText(/폴더에 일주일마다 백업해요/)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "지금 백업" })).toBeInTheDocument();
+});
+
+test("text size and opacity are chosen from settings", async () => {
+  const user = userEvent.setup();
+  const onChange = vi.fn().mockResolvedValue(settings);
+  render(<SettingsTab settings={settings} status={status} onChange={onChange} />);
+  await user.click(screen.getByRole("radio", { name: "크게" }));
+  expect(onChange).toHaveBeenCalledWith("widget_scale", "large");
+  await user.click(screen.getByRole("radio", { name: "80%" }));
+  expect(onChange).toHaveBeenCalledWith("widget_opacity", "80");
 });

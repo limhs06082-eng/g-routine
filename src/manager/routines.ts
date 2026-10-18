@@ -1,7 +1,7 @@
 import type { RepeatType, Routine, RoutineInput, Slot } from "@/lib/api";
 
 export const WEEKDAY_NAMES = ["월", "화", "수", "목", "금", "토", "일"];
-export const REPEAT_NAMES: Record<RepeatType, string> = { daily: "매일", weekdays: "요일 지정", once: "하루만" };
+export const REPEAT_NAMES: Record<RepeatType, string> = { daily: "매일", weekdays: "요일 지정", monthly: "매월", once: "하루만" };
 export const SLOTS: Slot[] = ["morning", "class", "after"];
 export const SLOT_NAMES: Record<Slot, string> = { morning: "조회 전", class: "수업 중", after: "방과 후" };
 
@@ -11,9 +11,22 @@ export function weekdayLabel(bits: number): string {
   return WEEKDAY_NAMES.filter((_, i) => (bits & (1 << i)) !== 0).join("·");
 }
 
-export function repeatLabel(r: Pick<Routine, "repeatType" | "weekdays" | "onceDate">): string {
+export function monthlyLabel(day: number | null): string {
+  if (day === null) return "매월";
+  return day === 0 ? "매월 마지막 평일" : `매월 ${day}일`;
+}
+
+/** 기간 한정 표시: "~12/31", "3/2~", "3/2~7/20" */
+export function periodLabel(r: Pick<Routine, "activeFrom" | "activeUntil">): string | null {
+  const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+  if (!r.activeFrom && !r.activeUntil) return null;
+  return `${r.activeFrom ? md(r.activeFrom) : ""}~${r.activeUntil ? md(r.activeUntil) : ""}`;
+}
+
+export function repeatLabel(r: Pick<Routine, "repeatType" | "weekdays" | "onceDate"> & { monthDay?: number | null }): string {
   if (r.repeatType === "daily") return "매일";
   if (r.repeatType === "weekdays") return weekdayLabel(r.weekdays);
+  if (r.repeatType === "monthly") return monthlyLabel(r.monthDay ?? null);
   if (!r.onceDate) return "하루";
   return `${Number(r.onceDate.slice(5, 7))}/${Number(r.onceDate.slice(8, 10))} 하루`;
 }
@@ -42,11 +55,22 @@ export function todayString(d: Date = new Date()): string {
 }
 
 export function emptyInput(): RoutineInput {
-  return { title: "", repeatType: "daily", weekdays: 0, onceDate: null, dueTime: null, link: null, slot: null };
+  return { title: "", repeatType: "daily", weekdays: 0, onceDate: null, dueTime: null, link: null, slot: null, monthDay: null, activeFrom: null, activeUntil: null };
 }
 
 export function toInput(r: Routine): RoutineInput {
-  return { title: r.title, repeatType: r.repeatType, weekdays: r.weekdays, onceDate: r.onceDate, dueTime: r.dueTime, link: r.link, slot: r.slot };
+  return {
+    title: r.title,
+    repeatType: r.repeatType,
+    weekdays: r.weekdays,
+    onceDate: r.onceDate,
+    dueTime: r.dueTime,
+    link: r.link,
+    slot: r.slot,
+    monthDay: r.monthDay,
+    activeFrom: r.activeFrom,
+    activeUntil: r.activeUntil,
+  };
 }
 
 /** 저장 전 정리: 공백 제거, 반복 종류에 맞지 않는 값 비우기 */
@@ -59,6 +83,10 @@ export function normalize(input: RoutineInput): RoutineInput {
     dueTime: input.dueTime ? input.dueTime : null,
     link: input.link?.trim() ? input.link.trim() : null,
     slot: input.slot,
+    monthDay: input.repeatType === "monthly" ? input.monthDay : null,
+    // 하루만 할 일은 날짜가 정해져 있어 기간을 쓰지 않는다
+    activeFrom: input.repeatType === "once" ? null : input.activeFrom || null,
+    activeUntil: input.repeatType === "once" ? null : input.activeUntil || null,
   };
 }
 
@@ -68,6 +96,8 @@ export function validateInput(input: RoutineInput): string | null {
   if ([...title].length > 40) return "루틴 이름은 40자 이내로 입력해 주세요";
   if (input.repeatType === "weekdays" && (input.weekdays & 0x7f) === 0) return "요일을 하나 이상 골라 주세요";
   if (input.repeatType === "once" && !input.onceDate) return "날짜를 골라 주세요";
+  if (input.repeatType === "monthly" && input.monthDay === null) return "매월 며칠인지 골라 주세요";
+  if (input.activeFrom && input.activeUntil && input.activeFrom > input.activeUntil) return "기간의 시작일이 끝나는 날보다 늦어요";
   if (input.link && input.link.trim() && !isAllowedLink(input.link.trim())) {
     return "바로가기는 https:// 주소나 C:\\ 같은 프로그램 경로만 넣을 수 있어요";
   }

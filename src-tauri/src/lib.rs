@@ -9,6 +9,7 @@ mod service;
 mod shell;
 mod startup;
 mod state;
+mod stats;
 mod storage;
 mod templates;
 #[cfg(test)]
@@ -92,6 +93,8 @@ pub fn run() {
             commands::set_vacation,
             commands::holiday_coverage,
             commands::save_diagnostics,
+            commands::history_stats,
+            commands::export_csv,
             commands::backup2_info,
             commands::set_backup2_dir,
             commands::backup2_now,

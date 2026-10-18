@@ -130,6 +130,23 @@ pub async fn history_day(state: State<'_, AppState>, day: String) -> AppResult<V
     state.with_conn(|c| service::history_day(c, &day))
 }
 
+/// 기간 통계: 날짜별 달성, 루틴별 달성률, 연속 달성 일수
+#[tauri::command]
+pub async fn history_stats(state: State<'_, AppState>, from: String, to: String) -> AppResult<crate::stats::Stats> {
+    state.with_conn(|c| {
+        let today = service::today(c, now())?;
+        crate::stats::history_stats(c, &from, &to, today)
+    })
+}
+
+/// 기간의 기록을 CSV로 저장한다 (엑셀에서 한글이 깨지지 않게 BOM을 붙인다)
+#[tauri::command]
+pub async fn export_csv(state: State<'_, AppState>, path: String, from: String, to: String) -> AppResult<()> {
+    let csv = state.with_conn(|c| crate::stats::export_csv(c, &from, &to))?;
+    std::fs::write(&path, format!("\u{feff}{csv}"))?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn get_settings(state: State<'_, AppState>) -> AppResult<Settings> {
     state.with_conn(settings::load)

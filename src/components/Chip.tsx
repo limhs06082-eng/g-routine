@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-export type ChipKind = "daily" | "weekdays" | "once" | "due" | "overdue";
+export type ChipKind = "daily" | "weekdays" | "monthly" | "once" | "due" | "overdue";
 
 const STYLES: Record<ChipKind, string> = {
   daily: "bg-chip-daily text-chip-daily-ink",
   weekdays: "bg-chip-weekdays text-chip-weekdays-ink",
+  monthly: "bg-soft-2 text-ink",
   once: "bg-chip-once text-chip-once-ink",
   due: "bg-chip-due text-chip-due-ink",
   overdue: "bg-danger-soft text-danger font-medium",

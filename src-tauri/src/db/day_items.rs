@@ -217,6 +217,41 @@ pub fn month_summary(c: &Connection, year: i32, month: u32) -> AppResult<Vec<Day
     Ok(rows)
 }
 
+/// 기간(양 끝 포함) 동안 기록이 있는 날의 요약, 날짜순
+pub fn range_summary(c: &Connection, from: &str, to: &str) -> AppResult<Vec<DaySummary>> {
+    let mut st = c.prepare(
+        "SELECT day, COUNT(*), COUNT(completed_at) FROM day_items WHERE day BETWEEN ?1 AND ?2 GROUP BY day ORDER BY day",
+    )?;
+    let rows = st
+        .query_map([from, to], |r| Ok(DaySummary { day: r.get(0)?, total: r.get(1)?, completed: r.get(2)? }))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// 기간 동안 루틴별 기록 수와 완료 수. 이름은 그 기간 마지막 기록에 적힌 것
+pub fn routine_summary(c: &Connection, from: &str, to: &str) -> AppResult<Vec<crate::stats::RoutineStat>> {
+    let mut st = c.prepare(
+        "SELECT d.routine_id,
+                (SELECT d2.title_snapshot FROM day_items d2
+                  WHERE d2.routine_id = d.routine_id AND d2.day BETWEEN ?1 AND ?2 ORDER BY d2.day DESC LIMIT 1),
+                COUNT(*), COUNT(d.completed_at)
+           FROM day_items d WHERE d.day BETWEEN ?1 AND ?2 GROUP BY d.routine_id",
+    )?;
+    let rows = st
+        .query_map([from, to], |r| {
+            Ok(crate::stats::RoutineStat { routine_id: r.get(0)?, title: r.get(1)?, total: r.get(2)?, completed: r.get(3)? })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// 기간 동안의 모든 기록 (CSV 내보내기용), 날짜 · 순서대로
+pub fn items_between(c: &Connection, from: &str, to: &str) -> AppResult<Vec<DayItem>> {
+    let mut st = c.prepare(&format!("{ITEM_SELECT} WHERE d.day BETWEEN ?1 AND ?2 ORDER BY d.day, d.sort_order, d.id"))?;
+    let rows = st.query_map([from, to], item_from_row)?.collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
 pub fn item_day(c: &Connection, item_id: i64) -> AppResult<String> {
     c.query_row("SELECT day FROM day_items WHERE id = ?1", [item_id], |r| r.get(0))
         .optional()?

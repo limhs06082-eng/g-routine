@@ -72,7 +72,10 @@ export function useSettings(enabled: boolean) {
  * 투명한 부분도 창이라 클릭을 막으므로, 보이는 만큼만 창이어야 한다.
  * `capped`는 내용이 화면 높이 상한을 넘었다는 뜻이고, 이때만 스크롤을 켠다.
  */
-export function useAutoResize<T extends HTMLElement>() {
+/** 위젯 보통 너비(논리 px). Rust shell::window::WIDGET_WIDTH와 같다 */
+export const WIDGET_WIDTH = 280;
+
+export function useAutoResize<T extends HTMLElement>(normalWidth: number | null = null) {
   const ref = useRef<T | null>(null);
   const [capped, setCapped] = useState(false);
   useEffect(() => {
@@ -87,8 +90,8 @@ export function useAutoResize<T extends HTMLElement>() {
         ro.observe(pill);
       }
       const h = Math.ceil(el.getBoundingClientRect().height);
-      // 알약 너비 + 바깥 여백(p-1.5 양쪽 12px)
-      const w = pill ? Math.ceil(pill.getBoundingClientRect().width) + 12 : null;
+      // 알약 너비 + 바깥 여백(p-1.5 양쪽 12px). 아니면 보통 너비(글자를 크게 보면 그만큼 넓게)
+      const w = pill ? Math.ceil(pill.getBoundingClientRect().width) + 12 : normalWidth;
       const key = `${h}x${w}`;
       if (key !== last) {
         last = key;
@@ -100,6 +103,6 @@ export function useAutoResize<T extends HTMLElement>() {
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [normalWidth]);
   return { ref, capped };
 }

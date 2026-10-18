@@ -3,7 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { compareVersions, unseenNotes } from "@/lib/changelog";
-import { useAutoResize, useData, useSettings } from "@/lib/hooks";
+import { useAutoResize, useData, useSettings, WIDGET_WIDTH } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { Setup } from "./Setup";
 import { TodayPanel } from "./TodayPanel";
@@ -15,7 +15,11 @@ export function WidgetApp() {
   const { data: status, error, reload } = useData(api.status);
   const ready = status?.ready ?? false;
   const { settings, update } = useSettings(ready);
-  const { ref, capped } = useAutoResize<HTMLDivElement>();
+  // 보기 설정: 글자 크기(크게면 1.15배, 위젯도 그만큼 넓게)와 불투명도
+  const scale = settings?.widgetScale === "large" ? 1.15 : 1;
+  const opacity = (settings?.widgetOpacity ?? 100) / 100;
+  const { ref, capped } = useAutoResize<HTMLDivElement>(scale === 1 ? null : Math.round(WIDGET_WIDTH * scale));
+  const look = scale !== 1 || opacity !== 1 ? { zoom: scale, opacity } : undefined;
   const pinned = settings?.alwaysOnTop ?? false;
   const mini = ready && (settings?.miniMode ?? false);
   const [version, setVersion] = useState<string | null>(null);
@@ -61,9 +65,9 @@ export function WidgetApp() {
     <div className={cn("widget-scroll h-screen", capped ? "overflow-y-auto" : "overflow-hidden")}>
       <div ref={ref} className={cn("p-1.5", mini && "flex justify-end")}>
         {mini ? (
-          panel
+          <div style={look}>{panel}</div>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-border bg-background shadow-[0_2px_10px_rgba(44,44,42,0.10)]">
+          <div style={look} className="overflow-hidden rounded-xl border border-border bg-background shadow-[0_2px_10px_rgba(44,44,42,0.10)]">
             {!status ? (
               error ? (
                 <div className="flex flex-col items-center gap-2 px-4 py-6 text-center text-xs text-muted-foreground">

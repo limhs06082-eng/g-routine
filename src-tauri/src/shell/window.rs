@@ -118,7 +118,8 @@ pub fn resize_widget(app: &AppHandle, logical_height: f64, logical_width: Option
     let min_h = (MIN_HEIGHT * scale).round() as i32;
     let (y, new_h) = fit_height(pos.y, old.height as i32, wanted, min_h, work, margin);
     let capped = wanted > new_h;
-    let new_w = (logical_width.unwrap_or(WIDGET_WIDTH).clamp(40.0, WIDGET_WIDTH) * scale).round() as i32;
+    // 글자를 크게 보면 위젯도 넓어진다 (최대 1.25배)
+    let new_w = (logical_width.unwrap_or(WIDGET_WIDTH).clamp(40.0, WIDGET_WIDTH * 1.25) * scale).round() as i32;
     let x = pos.x + old.width as i32 - new_w;
     if new_h == old.height as i32 && y == pos.y && new_w == old.width as i32 {
         return Ok(capped);

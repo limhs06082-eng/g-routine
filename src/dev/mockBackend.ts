@@ -19,6 +19,9 @@ function routine(id: number, title: string, extra: Partial<Routine> = {}): Routi
     dueTime: null,
     link: null,
     slot: null,
+    monthDay: null,
+    activeFrom: null,
+    activeUntil: null,
     sortOrder: id,
     createdAt: `${TODAY}T08:00:00`,
     archivedAt: null,
@@ -36,7 +39,7 @@ const routines: Routine[] = [
   routine(7, "가정통신문 회수", { repeatType: "once", onceDate: TODAY }),
 ];
 const doneAt = new Map<number, string>([[2, `${TODAY}T08:55:00`]]);
-let settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, miniMode: false, vacationStart: null, vacationEnd: null, seenVersion: null };
+let settings: Settings = { alwaysOnTop: true, autostart: true, hideWeekends: false, dayStartHour: 4, theme: "lavender", dueAlerts: true, hideHolidays: true, miniMode: false, vacationStart: null, vacationEnd: null, seenVersion: null, widgetScale: "normal", widgetOpacity: 100 };
 let ready = new URLSearchParams(window.location.search).get("setup") !== "1";
 const DATA_DIR = "D:\\G-routine\\data";
 let backup2 = { dir: null as string | null, last: null as string | null, suggested: "C:\\Users\\선생님\\OneDrive" as string | null, dismissed: false };
@@ -49,6 +52,12 @@ function bit(day: string) {
 
 function applies(r: Routine, day: string) {
   if (r.archivedAt) return false;
+  if ((r.activeFrom && day < r.activeFrom) || (r.activeUntil && day > r.activeUntil)) return false;
+  if (r.repeatType === "monthly") {
+    const [y, m, d] = day.split("-").map(Number);
+    const last = new Date(y, m, 0).getDate();
+    return r.monthDay === 0 ? d === last : r.monthDay === d;
+  }
   if (r.repeatType === "daily") return true;
   if (r.repeatType === "weekdays") return (r.weekdays & bit(day)) !== 0;
   return r.onceDate === day;
@@ -136,6 +145,8 @@ const KEY_MAP: Record<string, keyof Settings> = {
   hide_holidays: "hideHolidays",
   mini_mode: "miniMode",
   seen_version: "seenVersion",
+  widget_scale: "widgetScale",
+  widget_opacity: "widgetOpacity",
 };
 
 export function installMockBackend() {
@@ -209,7 +220,8 @@ export function installMockBackend() {
       case "set_setting": {
         const field = KEY_MAP[args.key as string];
         const raw = args.value as string;
-        const value = field === "dayStartHour" ? Number(raw) : field === "theme" || field === "seenVersion" ? raw : raw === "true";
+        const value =
+          field === "dayStartHour" || field === "widgetOpacity" ? Number(raw) : field === "theme" || field === "seenVersion" || field === "widgetScale" ? raw : raw === "true";
         settings = { ...settings, [field]: value } as Settings;
         changed();
         return settings;
@@ -228,6 +240,31 @@ export function installMockBackend() {
       case "dismiss_backup2":
         backup2 = { ...backup2, dismissed: true };
         changed();
+        return null;
+      case "history_stats": {
+        const from = args.from as string;
+        const to = args.to as string;
+        const days: DaySummary[] = [];
+        for (let y = Number(from.slice(0, 4)), m = Number(from.slice(5, 7)); `${y}-${pad(m)}` <= to.slice(0, 7); m === 12 ? (y++, (m = 1)) : m++) {
+          days.push(...historyMonth(y, m).filter((d) => d.day >= from && d.day <= to));
+        }
+        const total = days.reduce((s, d) => s + d.total, 0);
+        const completed = days.reduce((s, d) => s + d.completed, 0);
+        return {
+          from,
+          to,
+          days,
+          total,
+          completed,
+          streak: 3,
+          routines: routines
+            .filter((r) => r.repeatType === "daily")
+            .map((r, i) => ({ routineId: r.id, title: r.title, total: days.length, completed: Math.max(0, days.length - i * 2) }))
+            .sort((a, b) => a.completed / a.total - b.completed / b.total),
+        };
+      }
+      case "export_csv":
+        console.info("[mock] export_csv", args);
         return null;
       case "save_diagnostics":
         console.info("[mock] save_diagnostics", args.path);

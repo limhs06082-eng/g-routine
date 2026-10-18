@@ -7,6 +7,10 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(() => Promise.resolve(()
 const apiMock = vi.hoisted(() => ({
   historyMonth: vi.fn(),
   historyDay: vi.fn(),
+  // 처음 고르는 날(오늘 업무일). 기본은 응답하지 않아 달력 날짜를 그대로 둔다
+  today: vi.fn(() => new Promise(() => {})),
+  historyStats: vi.fn(),
+  exportCsv: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => ({
